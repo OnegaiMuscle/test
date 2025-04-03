@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reversi</title>
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+    <h1>Reversi</h1>
+
+    <div class="reversi-game">
+        <div class="board-container">
+            <div id="reversi-board"></div>
+        </div>
+
+        <div class="game-info">
+            <div class="score-display">
+                <div class="player-score">
+                    <span class="score-indicator black"></span>
+                    <span id="black-score">2</span>
+                </div>
+                <div id="current-player" class="current-turn black">Tour: Noir</div>
+                <div class="player-score">
+                    <span class="score-indicator white"></span>
+                    <span id="white-score">2</span>
+                </div>
+            </div>
+            <div id="reversi-status">Commencez la partie</div>
+            <div id="thinking">L'IA réfléchit...</div>
+            <div class="game-actions">
+                <button id="new-game-btn">Nouvelle partie</button>
+                <button id="hint-btn" class="secondary">Indice</button>
+            </div>
+            <div class="switch-container">
+                <label class="switch">
+                    <input type="checkbox" id="show-hints" checked>
+                    <span class="slider"></span>
+                </label>
+                <span>Afficher coups possibles</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Game Modal -->
+    <div id="new-game-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Nouvelle partie</h2>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Qui commence ?</label>
+                    <div class="option-cards">
+                        <div class="option-card selected" data-player="human">
+                            <div class="icon black"></div>
+                            <span>Vous</span>
+                        </div>
+                        <div class="option-card" data-player="ai">
+                            <div class="icon white"></div>
+                            <span>IA</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Difficulté de l'IA</label>
+                    <div class="option-cards">
+                        <div class="difficulty-card" data-difficulty="random">Aléatoire</div>
+                        <div class="difficulty-card" data-difficulty="easy">Facile</div>
+                        <div class="difficulty-card selected" data-difficulty="medium">Moyenne</div>
+                        <div class="difficulty-card" data-difficulty="hard">Difficile</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancel-new-game" class="secondary">Annuler</button>
+                <button id="start-new-game">Commencer</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // ================ ARCHITECTURE HEXAGONALE POUR REVERSI ================
+
+    // ==================== DOMAINE (CORE) ====================
+    const ReversiDomain = (() => {
+        // Constants
+        const PLAYER_BLACK = 1;
+        const PLAYER_WHITE = -1;
+        const EMPTY_CELL = 0;
+        const BOARD_SIZE = 8;
+        const DIRECTIONS = [
+            [-1, -1], [-1, 0], [-1, 1],
+            [0, -1],           [0, 1],
+            [1, -1],  [1, 0],  [1, 1]
+        ];
+
+        // Board weights for AI evaluation
+        const BOARD_WEIGHTS = [
+            [120, -20, 20, 5, 5, 20, -20, 120],
+            [-20, -40, -5, -5, -5, -5, -40, -20],
+            [20, -5, 15, 3, 3, 15, -5, 20],
+            [5, -5, 3, 3, 3, 3, -5, 5],
+            [5, -5, 3, 3, 3, 3, -5, 5],
+            [20, -5, 15, 3, 3, 15, -5, 20],
+            [-20, -40, -5, -5, -5, -5, -40, -20],
+            [120, -20, 20, 5, 5, 20, -20, 120]
+        ];
+
+        // Pure functions for game logic
+        function createNewGame() {
+            // Create empty board
+            const board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(EMPTY_CELL));
+
+            // Set up initial pieces
+            const mid = BOARD_SIZE / 2 - 1;
+            board[mid][mid] = PLAYER_WHITE;
+            board[mid][mid + 1] = PLAYER_BLACK;
+            board[mid + 1][mid] = PLAYER_BLACK;
+            board[mid + 1][mid + 1] = PLAYER_WHITE;
+
+            return {
+                board: board,
+                currentPlayer: PLAYER_BLACK
+            };
+        }
+
+        function isValidMove(board, row, col, player) {
+            // Already occupied
+            if (board[row][col] !== EMPTY_CELL) {
+                return false;
+            }
+
+            let validMove = false;
+
+            for (const [dr, dc] of DIRECTIONS) {
+                let r = row + dr;
+                let c = col + dc;
+                let foundOpponent = false;
+
+                while (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE) {
+                    if (board[r][c] === EMPTY_CELL) {
+                        break;
+                    }
+
+                    if (board[r][c] === -player) {
+                        foundOpponent = true;
+                    } else if (board[r][c] === player && foundOpponent) {
+                        validMove = true;
+                        break;
+                    } else {
+                        break;
+                    }
+
+                    r += dr;
+                    c += dc;
+                }
+
+                if (validMove) break;
+            }
+
+            return validMove;
+        }
+
+        function getAllValidMoves(board, player) {
+            const validMoves = [];
+
+            for (let row = 0; row < BOARD_SIZE; row++) {
+                for (let col = 0; col < BOARD_SIZE; col++) {
+                    if (isValidMove(board, row, col, player)) {
+                        validMoves.push([row, col]);
+                    }
+                }
+            }
+
+            return validMoves;
+        }
+
+        function hasValidMoves(board, player) {
+            return getAllValidMoves(board, player).length > 0;
+        }
+
+        function makeMove(gameState, row, col) {
+            // Create a deep copy of the board to maintain immutability
+            const newBoard = gameState.board.map(row => [...row]);
+            const player = gameState.currentPlayer;
+
+            // If move is not valid, return the unchanged state
+            if (!isValidMove(newBoard, row, col, player)) {
+                return gameState;
+            }
+
+            // Place the piece
+            newBoard[row][col] = player;
+
+            // Flip opponent pieces
+            for (const [dr, dc] of DIRECTIONS) {
+                let r = row + dr;
+                let c = col + dc;
+                let toFlip = [];
+
+                while (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE) {
+                    if (newBoard[r][c] === EMPTY_CELL) {
+                        break;
+                    }
+
+                    if (newBoard[r][c] === -player) {
+                        toFlip.push([r, c]);
+                    } else if (newBoard[r][c] === player) {
+                        // Flip all pieces in this direction
+                        for (const [flipRow, flipCol] of toFlip) {
+                            newBoard[flipRow][flipCol] = player;
+                        }
+                        break;
+                    } else {
+                        break;
+                    }
+
+                    r += dr;
+                    c += dc;
+                }
+            }
+
+            // Switch players and check for valid moves
+            let nextPlayer = -player;
+
+            // Check if next player has valid moves
+            if (!hasValidMoves(newBoard, nextPlayer)) {
+                // Switch back to current player if next player has no moves
+                nextPlayer = player;
+
+                // If current player also has no moves, the game is over
+                if (!hasValidMoves(newBoard, nextPlayer)) {
+                    // Game over state
+                    return {
+                        board: newBoard,
+                        currentPlayer: EMPTY_CELL, // Use EMPTY_CELL to indicate game over
+                        isGameOver: true
+                    };
+                }
+            }
+
+            return {
+                board: newBoard,
+                currentPlayer: nextPlayer
+            };
+        }
+
+        function countPieces(board) {
+            let blackCount = 0;
+            let whiteCount = 0;
+
+            for (let row = 0; row < BOARD_SIZE; row++) {
+                for (let col = 0; col < BOARD_SIZE; col++) {
+                    if (board[row][col] === PLAYER_BLACK) {
+                        blackCount++;
+                    } else if (board[row][col] === PLAYER_WHITE) {
+                        whiteCount++;
+                    }
+                }
+            }
+
+            return { blackCount, whiteCount };
+        }
+
+        function getWinner(board) {
+            const { blackCount, whiteCount } = countPieces(board);
+
+            if (blackCount > whiteCount) {
+                return PLAYER_BLACK;
+            } else if (whiteCount > blackCount) {
+                return PLAYER_WHITE;
+            } else {
+                return EMPTY_CELL; // Draw
+            }
+        }
+
+        // AI logic
+        function evaluateBoard(board, player) {
+            let score = 0;
+
+            // Position-based scoring
+            for (let row = 0; row < BOARD_SIZE; row++) {
+                for (let col = 0; col < BOARD_SIZE; col++) {
+                    if (board[row][col] === player) {
+                        score += BOARD_WEIGHTS[row][col];
+                    } else if (board[row][col] === -player) {
+                        score -= BOARD_WEIGHTS[row][col];
+                    }
+                }
+            }
+
+            return score;
+        }
+
+        function minimax(board, depth, alpha, beta, isMaximizing, originalPlayer) {
+            // If we've reached the target depth or the game is over, evaluate the board
+            if (depth === 0) {
+                return evaluateBoard(board, originalPlayer);
+            }
+
+            const currentPlayer = isMaximizing ? originalPlayer : -originalPlayer;
+            const validMoves = getAllValidMoves(board, currentPlayer);
+
+            if (validMoves.length === 0) {
+                // Check if the game is over (no valid moves for either player)
+                const oppositePlayer = -currentPlayer;
+                if (getAllValidMoves(board, oppositePlayer).length === 0) {
+                    // Game is over, count pieces
+                    const { blackCount, whiteCount } = countPieces(board);
+                    const playerCount = originalPlayer === PLAYER_BLACK ? blackCount : whiteCount;
+                    const opponentCount = originalPlayer === PLAYER_BLACK ? whiteCount : blackCount;
+
+                    if (playerCount > opponentCount) {
+                        return 1000 + (playerCount - opponentCount);
+                    } else if (opponentCount > playerCount) {
+                        return -1000 - (opponentCount - playerCount);
+                    } else {
+                        return 0;
+                    }
+                }
+
+                // Skip turn
+                return minimax(board, depth - 1, alpha, beta, !isMaximizing, originalPlayer);
+            }
+
+            if (isMaximizing) {
+                let maxEval = -Infinity;
+
+                for (const [row, col] of validMoves) {
+                    // Simulate move
+                    const newBoardState = makeMove({
+                        board: board,
+                        currentPlayer: currentPlayer
+                    }, row, col);
+
+                    const evaluation = minimax(
+                        newBoardState.board,
+                        depth - 1,
+                        alpha,
+                        beta,
+                        false,
+                        originalPlayer
+                    );
+
+                    maxEval = Math.max(maxEval, evaluation);
+                    alpha = Math.max(alpha, evaluation);
+                    if (beta <= alpha) break; // Alpha-beta pruning
+                }
+
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+
+                for (const [row, col] of validMoves) {
+                    // Simulate move
+                    const newBoardState = makeMove({
+                        board: board,
+                        currentPlayer: currentPlayer
+                    }, row, col);
+
+                    const evaluation = minimax(
+                        newBoardState.board,
+                        depth - 1,
+                        alpha,
+                        beta,
+                        true,
+                        originalPlayer
+                    );
+
+                    minEval = Math.min(minEval, evaluation);
+                    beta = Math.min(beta, evaluation);
+                    if (beta <= alpha) break; // Alpha-beta pruning
+                }
+
+                return minEval;
+            }
+        }
+
+        function findBestMove(gameState, difficulty) {
+            const board = gameState.board;
+            const player = gameState.currentPlayer;
+            const validMoves = getAllValidMoves(board, player);
+
+            if (validMoves.length === 0) {
+                return null;
+            }
+
+            // For random difficulty, just return a random valid move
+            if (difficulty === 'random') {
+                const randomIndex = Math.floor(Math.random() * validMoves.length);
+                return validMoves[randomIndex];
+            }
+
+            // Determine search depth based on difficulty
+            let depth;
+            switch (difficulty) {
+                case 'easy': depth = 2; break;
+                case 'medium': depth = 4; break;
+                case 'hard': depth = 6; break;
+                default: depth = 4;
+            }
+
+            let bestScore = -Infinity;
+            let bestMove = null;
+
+            for (const [row, col] of validMoves) {
+                // Simulate the move
+                const newBoardState = makeMove(gameState, row, col);
+
+                // Evaluate using minimax
+                const score = minimax(
+                    newBoardState.board,
+                    depth - 1,
+                    -Infinity,
+                    Infinity,
+                    false,
+                    player
+                );
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMove = [row, col];
+                }
+            }
+
+            return bestMove;
+        }
+
+        // Expose the public API
+        return {
+            // Constants
+            PLAYER_BLACK,
+            PLAYER_WHITE,
+            EMPTY_CELL,
+            BOARD_SIZE,
+
+            // Core game functions
+            createNewGame,
+            isValidMove,
+            getAllValidMoves,
+            hasValidMoves,
+            makeMove,
+            countPieces,
+            getWinner,
+
+            // AI functions
+            findBestMove
+        };
+    })();
+
+    // ==================== USER INTERFACE ====================
+    const ReversiUI = (() => {
+        // Game configuration options
+        const config = {
+            firstPlayer: 'human', // 'human' or 'ai'
+            difficulty: 'medium', // 'random', 'easy', 'medium', 'hard'
+            showHints: true
+        };
+
+        // Cache DOM elements
+        const elements = {
+            board: document.getElementById('reversi-board'),
+            blackScore: document.getElementById('black-score'),
+            whiteScore: document.getElementById('white-score'),
+            status: document.getElementById('reversi-status'),
+            thinkingIndicator: document.getElementById('thinking'),
+            currentPlayer: document.getElementById('current-player'),
+            newGameBtn: document.getElementById('new-game-btn'),
+            hintBtn: document.getElementById('hint-btn'),
+            showHintsToggle: document.getElementById('show-hints'),
+
+            // Modal elements
+            modal: document.getElementById('new-game-modal'),
+            playerOptions: document.querySelectorAll('.option-card[data-player]'),
+            difficultyOptions: document.querySelectorAll('.difficulty-card[data-difficulty]'),
+            cancelBtn: document.getElementById('cancel-new-game'),
+            startBtn: document.getElementById('start-new-game')
+        };
+
+        // Initialize UI elements
+        function initUI() {
+            // Create board cells
+            createBoardUI();
+
+            // Set up event listeners
+            setupEventListeners();
+
+            // Initialize hints toggle
+            config.showHints = elements.showHintsToggle.checked;
+        }
+
+        // Create the board UI elements
+        function createBoardUI() {
+            elements.board.innerHTML = '';
+
+            for (let row = 0; row < ReversiDomain.BOARD_SIZE; row++) {
+                for (let col = 0; col < ReversiDomain.BOARD_SIZE; col++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('reversi-cell');
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+
+                    elements.board.appendChild(cell);
+                }
+            }
+        }
+
+        // Set up event listeners
+        function setupEventListeners() {
+            // Board cell clicks
+            elements.board.addEventListener('click', handleBoardClick);
+
+            // New game button
+            elements.newGameBtn.addEventListener('click', showNewGameModal);
+
+            // Hint button
+            elements.hintBtn.addEventListener('click', showHint);
+
+            // Show hints toggle
+            elements.showHintsToggle.addEventListener('change', (e) => {
+                config.showHints = e.target.checked;
+                ReversiAdapter.updateHints();
+            });
+
+            // Modal events
+            elements.cancelBtn.addEventListener('click', hideNewGameModal);
+            elements.startBtn.addEventListener('click', handleNewGameStart);
+
+            // Player selection
+            elements.playerOptions.forEach(option => {
+                option.addEventListener('click', () => {
+                    elements.playerOptions.forEach(opt => opt.classList.remove('selected'));
+                    option.classList.add('selected');
+                    config.firstPlayer = option.dataset.player;
+                });
+            });
+
+            // Difficulty selection
+            elements.difficultyOptions.forEach(option => {
+                option.addEventListener('click', () => {
+                    elements.difficultyOptions.forEach(opt => opt.classList.remove('selected'));
+                    option.classList.add('selected');
+                    config.difficulty = option.dataset.difficulty;
+                });
+            });
+        }
+
+        // Handle board click
+        function handleBoardClick(e) {
+            const cell = e.target.closest('.reversi-cell');
+            if (!cell) return;
+
+            const row = parseInt(cell.dataset.row);
+            const col = parseInt(cell.dataset.col);
+
+            ReversiAdapter.handleMove(row, col);
+        }
+
+        // Show a hint (highlight best move)
+        function showHint() {
+            // First, remove any previous hints
+            document.querySelectorAll('.reversi-cell').forEach(cell => {
+                cell.classList.remove('hint');
+            });
+
+            // Find best move
+            const bestMove = ReversiAdapter.getBestMove();
+
+            if (bestMove) {
+                const [row, col] = bestMove;
+                const cell = document.querySelector(`.reversi-cell[data-row="${row}"][data-col="${col}"]`);
+
+                // Add a temporary highlight class
+                cell.classList.add('valid-move');
+
+                // Remove the highlight after 2 seconds
+                setTimeout(() => {
+                    cell.classList.remove('valid-move');
+                    // Re-show all valid moves
+                    ReversiAdapter.updateHints();
+                }, 2000);
+            }
+        }
+
+        // Show new game modal
+        function showNewGameModal() {
+            elements.modal.style.display = 'flex';
+        }
+
+        // Hide new game modal
+        function hideNewGameModal() {
+            elements.modal.style.display = 'none';
+        }
+
+        // Handle new game start from modal
+        function handleNewGameStart() {
+            hideNewGameModal();
+            ReversiAdapter.startNewGame(config.firstPlayer, config.difficulty);
+        }
+
+        // Update board UI based on game state
+        function updateBoard(board) {
+            for (let row = 0; row < ReversiDomain.BOARD_SIZE; row++) {
+                for (let col = 0; col < ReversiDomain.BOARD_SIZE; col++) {
+                    const cell = document.querySelector(`.reversi-cell[data-row="${row}"][data-col="${col}"]`);
+                    cell.classList.remove('black', 'white', 'valid-move');
+
+                    if (board[row][col] === ReversiDomain.PLAYER_BLACK) {
+                        cell.classList.add('black');
+                    } else if (board[row][col] === ReversiDomain.PLAYER_WHITE) {
+                        cell.classList.add('white');
+                    }
+                }
+            }
+        }
+
+        // Update valid moves indicators
+        function updateValidMoves(validMoves) {
+            // Remove existing valid move indicators
+            document.querySelectorAll('.reversi-cell').forEach(cell => {
+                cell.classList.remove('valid-move');
+            });
+
+            // If hints are turned off, return
+            if (!config.showHints) return;
+
+            // Add valid move indicators
+            for (const [row, col] of validMoves) {
+                const cell = document.querySelector(`.reversi-cell[data-row="${row}"][data-col="${col}"]`);
+                cell.classList.add('valid-move');
+            }
+        }
+
+        // Update score display
+        function updateScores(blackCount, whiteCount) {
+            elements.blackScore.textContent = blackCount;
+            elements.whiteScore.textContent = whiteCount;
+        }
+
+        // Update current player indicator
+        function updateCurrentPlayer(player) {
+            elements.currentPlayer.classList.remove('black', 'white');
+
+            if (player === ReversiDomain.PLAYER_BLACK) {
+                elements.currentPlayer.classList.add('black');
+                elements.currentPlayer.textContent = 'Tour: Noir';
+            } else if (player === ReversiDomain.PLAYER_WHITE) {
+                elements.currentPlayer.classList.add('white');
+                elements.currentPlayer.textContent = 'Tour: Blanc';
+            } else {
+                elements.currentPlayer.textContent = 'Partie terminée';
+            }
+        }
+
+        // Update status message
+        function updateStatus(message) {
+            elements.status.textContent = message;
+        }
+
+        // Show/hide thinking indicator
+        function showThinking(visible) {
+            elements.thinkingIndicator.style.display = visible ? 'block' : 'none';
+        }
+
+        // Return public methods
+        return {
+            initUI,
+            updateBoard,
+            updateValidMoves,
+            updateScores,
+            updateCurrentPlayer,
+            updateStatus,
+            showThinking,
+            getConfig: () => ({ ...config })
+        };
+    })();
+
+    // ==================== ADAPTER ====================
+    const ReversiAdapter = (() => {
+        // State
+        let gameState;
+        let humanPlayer = ReversiDomain.PLAYER_BLACK;
+        let aiPlayer = ReversiDomain.PLAYER_WHITE;
+
+        // Initialize game
+        function init() {
+            ReversiUI.initUI();
+            gameState = ReversiDomain.createNewGame();
+            refreshUI();
+
+            // If AI goes first, make its move
+            if (gameState.currentPlayer === aiPlayer) {
+                setTimeout(makeAIMove, 500);
+            }
+        }
+
+        // Start new game with config
+        function startNewGame(firstPlayer, difficulty) {
+            // Create a new game
+            gameState = ReversiDomain.createNewGame();
+
+            // Set players based on who goes first
+            if (firstPlayer === 'human') {
+                humanPlayer = ReversiDomain.PLAYER_BLACK; // Human plays black (first)
+                aiPlayer = ReversiDomain.PLAYER_WHITE;    // AI plays white (second)
+            } else {
+                humanPlayer = ReversiDomain.PLAYER_WHITE; // Human plays white (second)
+                aiPlayer = ReversiDomain.PLAYER_BLACK;    // AI plays black (first)
+            }
+
+            // Refresh UI
+            refreshUI();
+
+            // If AI goes first, make its move
+            if (gameState.currentPlayer === aiPlayer) {
+                setTimeout(makeAIMove, 500);
+            }
+        }
+
+        // Handle player move
+        function handleMove(row, col) {
+            // If it's not human's turn or game is over, ignore
+            if (gameState.currentPlayer !== humanPlayer || gameState.isGameOver) {
+                return;
+            }
+
+            // Make the move
+            const newState = ReversiDomain.makeMove(gameState, row, col);
+
+            // If the state didn't change, the move was invalid
+            if (newState === gameState) {
+                return;
+            }
+
+            // Update game state
+            gameState = newState;
+            refreshUI();
+
+            // Check if game is over
+            if (gameState.isGameOver) {
+                endGame();
+                return;
+            }
+
+            // If it's AI's turn, make AI move
+            if (gameState.currentPlayer === aiPlayer) {
+                ReversiUI.showThinking(true);
+                setTimeout(() => {
+                    makeAIMove();
+                    ReversiUI.showThinking(false);
+                }, 700);
+            }
+        }
+
+        // Make AI move
+        function makeAIMove() {
+            const config = ReversiUI.getConfig();
+            const move = ReversiDomain.findBestMove(gameState, config.difficulty);
+
+            if (move) {
+                const [row, col] = move;
+                gameState = ReversiDomain.makeMove(gameState, row, col);
+
+                // Update UI
+                refreshUI();
+
+                // Check if game is over
+                if (gameState.isGameOver) {
+                    endGame();
+                    return;
+                }
+
+                // If AI needs to move again (human has no valid moves)
+                if (gameState.currentPlayer === aiPlayer) {
+                    ReversiUI.updateStatus("Pas de coup valide pour vous, l'IA joue à nouveau");
+                    ReversiUI.showThinking(true);
+
+                    setTimeout(() => {
+                        makeAIMove();
+                        ReversiUI.showThinking(false);
+                    }, 700);
+                }
+            }
+        }
+
+        // Get best move for hint feature
+        function getBestMove() {
+            if (gameState.isGameOver || gameState.currentPlayer !== humanPlayer) {
+                return null;
+            }
+
+            const config = ReversiUI.getConfig();
+            return ReversiDomain.findBestMove(gameState, config.difficulty);
+        }
+
+        // Update hints display
+        function updateHints() {
+            if (gameState.isGameOver) return;
+
+            const validMoves = ReversiDomain.getAllValidMoves(gameState.board, gameState.currentPlayer);
+            ReversiUI.updateValidMoves(validMoves);
+        }
+
+        // Refresh all UI components
+        function refreshUI() {
+            // Update board display
+            ReversiUI.updateBoard(gameState.board);
+
+            // Update scores
+            const { blackCount, whiteCount } = ReversiDomain.countPieces(gameState.board);
+            ReversiUI.updateScores(blackCount, whiteCount);
+
+            // Update current player indicator
+            ReversiUI.updateCurrentPlayer(gameState.currentPlayer);
+
+            // Update valid moves display
+            updateHints();
+
+            // Update status message
+            if (!gameState.isGameOver) {
+                const playerColor = gameState.currentPlayer === ReversiDomain.PLAYER_BLACK ? "Noir" : "Blanc";
+                const playerType = gameState.currentPlayer === humanPlayer ? "Vous" : "IA";
+                ReversiUI.updateStatus(`Au tour du joueur ${playerColor} (${playerType})`);
+            }
+        }
+
+        // End game
+        function endGame() {
+            const { blackCount, whiteCount } = ReversiDomain.countPieces(gameState.board);
+            const winner = ReversiDomain.getWinner(gameState.board);
+
+            let message;
+            if (winner === ReversiDomain.PLAYER_BLACK) {
+                message = `Partie terminée ! Noir gagne ${blackCount} à ${whiteCount}`;
+            } else if (winner === ReversiDomain.PLAYER_WHITE) {
+                message = `Partie terminée ! Blanc gagne ${whiteCount} à ${blackCount}`;
+            } else {
+                message = `Partie terminée ! Match nul ${blackCount} à ${whiteCount}`;
+            }
+
+            ReversiUI.updateStatus(message);
+        }
+
+        // Return public methods
+        return {
+            init,
+            startNewGame,
+            handleMove,
+            getBestMove,
+            updateHints
+        };
+    })();
+
+    // Initialize game when the page loads
+    window.addEventListener('DOMContentLoaded', ReversiAdapter.init);
+    </script>
+</body>
+</html>

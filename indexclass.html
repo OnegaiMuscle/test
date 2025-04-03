@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reversi</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1, h2 {
+            text-align: center;
+        }
+
+        /* Reversi Styles */
+        #reversi-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #reversi-board {
+            display: grid;
+            grid-template-columns: repeat(8, 50px);
+            gap: 2px;
+            background-color: #333;
+            border: 5px solid #333;
+            margin-top: 20px;
+        }
+
+        .reversi-cell {
+            width: 50px;
+            height: 50px;
+            background-color: #1a8c1a;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .reversi-cell.valid-move::before {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .reversi-cell::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            transition: all 0.3s;
+        }
+
+        .reversi-cell.white::after {
+            background-color: white;
+        }
+
+        .reversi-cell.black::after {
+            background-color: black;
+        }
+
+        #reversi-score {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+            font-size: 1.2em;
+            width: 100%;
+            max-width: 416px;
+        }
+
+        #reversi-status {
+            margin-top: 10px;
+            font-weight: bold;
+            height: 1.5em;
+        }
+
+        .ai-controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .ai-controls select {
+            padding: 5px;
+            border-radius: 5px;
+        }
+
+        .game-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 15px;
+            justify-content: center;
+        }
+
+        button {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        #thinking {
+            display: none;
+            margin-top: 10px;
+            font-style: italic;
+            color: #666;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #4CAF50;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        .hint-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .player-select {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .player-option {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .player-option label {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+
+        .player-icon {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+        }
+
+        .player-icon.black {
+            background-color: black;
+        }
+
+        .player-icon.white {
+            background-color: white;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <h1>Reversi</h1>
+
+    <div id="reversi-container">
+        <p>Placez vos pions pour capturer ceux de l'adversaire.</p>
+        <div id="reversi-score">
+            <div>Noir: <span id="black-score">2</span></div>
+            <div>Blanc: <span id="white-score">2</span></div>
+        </div>
+        <div id="reversi-status"></div>
+        <div id="thinking">L'IA réfléchit...</div>
+        <div id="reversi-board"></div>
+        <div class="game-options">
+            <div class="player-select">
+                <span>Joueur 1 (premier):</span>
+                <div class="player-option">
+                    <label>
+                        <input type="radio" name="first-player" value="human" checked>
+                        <span class="player-icon black"></span>
+                        Vous
+                    </label>
+                    <label>
+                        <input type="radio" name="first-player" value="ai">
+                        <span class="player-icon white"></span>
+                        IA
+                    </label>
+                </div>
+            </div>
+            <div class="ai-controls">
+                <label for="ai-difficulty">Difficulté:</label>
+                <select id="ai-difficulty">
+                    <option value="random">Aléatoire</option>
+                    <option value="easy">Facile</option>
+                    <option value="medium" selected>Moyenne</option>
+                    <option value="hard">Difficile</option>
+                </select>
+            </div>
+            <div class="hint-option">
+                <label class="switch">
+                    <input type="checkbox" id="show-hints" checked>
+                    <span class="slider"></span>
+                </label>
+                <span>Afficher coups possibles</span>
+            </div>
+        </div>
+        <button id="reset-reversi">Nouvelle partie</button>
+    </div>
+
+    <script>
+        // ================ REVERSI IMPLEMENTATION ================
+        class Reversi {
+            constructor() {
+                this.boardSize = 8;
+                this.board = Array(this.boardSize).fill().map(() => Array(this.boardSize).fill(0));
+                this.currentPlayer = 1; // 1 = black, -1 = white
+                this.humanPlayer = 1; // Default: human plays black
+                this.aiPlayer = -1; // Default: AI plays white
+                this.directions = [
+                    [-1, -1], [-1, 0], [-1, 1],
+                    [0, -1],           [0, 1],
+                    [1, -1],  [1, 0],  [1, 1]
+                ];
+
+                // Weights for minimax evaluation
+                this.boardWeights = [
+                    [120, -20, 20, 5, 5, 20, -20, 120],
+                    [-20, -40, -5, -5, -5, -5, -40, -20],
+                    [20, -5, 15, 3, 3, 15, -5, 20],
+                    [5, -5, 3, 3, 3, 3, -5, 5],
+                    [5, -5, 3, 3, 3, 3, -5, 5],
+                    [20, -5, 15, 3, 3, 15, -5, 20],
+                    [-20, -40, -5, -5, -5, -5, -40, -20],
+                    [120, -20, 20, 5, 5, 20, -20, 120]
+                ];
+
+                // Load player preferences
+                this.showHints = document.getElementById('show-hints').checked;
+
+                // Setup event listeners
+                document.getElementById('reset-reversi').addEventListener('click', () => this.resetGame());
+                document.getElementById('show-hints').addEventListener('change', (e) => {
+                    this.showHints = e.target.checked;
+                    this.showValidMoves();
+                });
+
+                // Add event listeners for player selection
+                document.querySelectorAll('input[name="first-player"]').forEach(radio => {
+                    radio.addEventListener('change', (e) => {
+                        this.setFirstPlayer(e.target.value);
+                    });
+                });
+
+                this.initBoard();
+                this.renderBoard();
+                this.showValidMoves();
+
+                // If AI is set to go first, make an AI move
+                if (this.currentPlayer === this.aiPlayer) {
+                    setTimeout(() => this.makeAIMove(), 500);
+                }
+            }
+
+            setFirstPlayer(playerType) {
+                if (playerType === 'human') {
+                    this.humanPlayer = 1; // Human plays black
+                    this.aiPlayer = -1;   // AI plays white
+                } else {
+                    this.humanPlayer = -1; // Human plays white
+                    this.aiPlayer = 1;     // AI plays black
+                }
+
+                this.resetGame();
+            }
+
+            initBoard() {
+                // Clear the board
+                this.board = Array(this.boardSize).fill().map(() => Array(this.boardSize).fill(0));
+
+                // Set up initial pieces
+                const mid = this.boardSize / 2 - 1;
+                this.board[mid][mid] = -1;       // White
+                this.board[mid][mid + 1] = 1;    // Black
+                this.board[mid + 1][mid] = 1;    // Black
+                this.board[mid + 1][mid + 1] = -1; // White
+
+                this.currentPlayer = 1; // Black starts
+
+                // Create the board UI
+                const boardElement = document.getElementById('reversi-board');
+                boardElement.innerHTML = '';
+
+                for (let row = 0; row < this.boardSize; row++) {
+                    for (let col = 0; col < this.boardSize; col++) {
+                        const cell = document.createElement('div');
+                        cell.classList.add('reversi-cell');
+                        cell.dataset.row = row;
+                        cell.dataset.col = col;
+
+                        cell.addEventListener('click', (e) => {
+                            const cellRow = parseInt(e.target.dataset.row);
+                            const cellCol = parseInt(e.target.dataset.col);
+                            this.makeMove(cellRow, cellCol);
+                        });
+
+                        boardElement.appendChild(cell);
+                    }
+                }
+
+                this.updateScores();
+                this.updateStatus();
+            }
+
+            renderBoard() {
+                for (let row = 0; row < this.boardSize; row++) {
+                    for (let col = 0; col < this.boardSize; col++) {
+                        const cell = document.querySelector(`.reversi-cell[data-row="${row}"][data-col="${col}"]`);
+                        cell.classList.remove('black', 'white', 'valid-move');
+
+                        if (this.board[row][col] === 1) {
+                            cell.classList.add('black');
+                        } else if (this.board[row][col] === -1) {
+                            cell.classList.add('white');
+                        }
+                    }
+                }
+
+                this.updateScores();
+                this.updateStatus();
+            }
+
+            showValidMoves() {
+                // Remove all valid move indicators
+                document.querySelectorAll('.reversi-cell').forEach(cell => {
+                    cell.classList.remove('valid-move');
+                });
+
+                if (!this.showHints) return;
+
+                // Show valid moves for current player
+                const validMoves = this.getAllValidMoves(this.currentPlayer);
+
+                for (const [row, col] of validMoves) {
+                    const cell = document.querySelector(`.reversi-cell[data-row="${row}"][data-col="${col}"]`);
+                    cell.classList.add('valid-move');
+                }
+            }
+
+            isValidMove(row, col, player) {
+                // Already occupied
+                if (this.board[row][col] !== 0) {
+                    return false;
+                }
+
+                let validMove = false;
+
+                for (const [dr, dc] of this.directions) {
+                    let r = row + dr;
+                    let c = col + dc;
+                    let foundOpponent = false;
+
+                    while (r >= 0 && r < this.boardSize && c >= 0 && c < this.boardSize) {
+                        if (this.board[r][c] === 0) {
+                            break;
+                        }
+
+                        if (this.board[r][c] === -player) {
+                            foundOpponent = true;
+                        } else if (this.board[r][c] === player && foundOpponent) {
+                            validMove = true;
+                            break;
+                        } else {
+                            break;
+                        }
+
+                        r += dr;
+                        c += dc;
+                    }
+
+                    if (validMove) break;
+                }
+
+                return validMove;
+            }
+
+            getFlippedPieces(row, col, player, actuallyFlip = false) {
+                let flippedCount = 0;
+
+                for (const [dr, dc] of this.directions) {
+                    let r = row + dr;
+                    let c = col + dc;
+                    let toFlip = [];
+
+                    while (r >= 0 && r < this.boardSize && c >= 0 && c < this.boardSize) {
+                        if (this.board[r][c] === 0) {
+                            break;
+                        }
+
+                        if (this.board[r][c] === -player) {
+                            toFlip.push([r, c]);
+                        } else if (this.board[r][c] === player) {
+                            // Flip all pieces in this direction
+                            if (actuallyFlip) {
+                                for (const [flipRow, flipCol] of toFlip) {
+                                    this.board[flipRow][flipCol] = player;
+                                }
+                            }
+                            flippedCount += toFlip.length;
+                            break;
+                        } else {
+                            break;
+                        }
+
+                        r += dr;
+                        c += dc;
+                    }
+                }
+
+                return flippedCount;
+            }
+
+            flipPieces(row, col, player) {
+                this.getFlippedPieces(row, col, player, true);
+            }
+
+            getAllValidMoves(player) {
+                const validMoves = [];
+
+                for (let row = 0; row < this.boardSize; row++) {
+                    for (let col = 0; col < this.boardSize; col++) {
+                        if (this.isValidMove(row, col, player)) {
+                            validMoves.push([row, col]);
+                        }
+                    }
+                }
+
+                return validMoves;
+            }
+
+            hasValidMoves(player) {
+                return this.getAllValidMoves(player).length > 0;
+            }
+
+            makeMove(row, col) {
+                // Prevent player from making move if it's AI's turn
+                if (this.currentPlayer === this.aiPlayer) {
+                    return;
+                }
+
+                if (!this.isValidMove(row, col, this.currentPlayer)) {
+                    return;
+                }
+
+                // Place the piece and flip captured pieces
+                this.board[row][col] = this.currentPlayer;
+                this.flipPieces(row, col, this.currentPlayer);
+                this.renderBoard();
+
+                // Switch players
+                this.currentPlayer = -this.currentPlayer;
+
+                // Check if the next player can make a move
+                if (!this.hasValidMoves(this.currentPlayer)) {
+                    // Skip turn if no valid moves
+                    this.currentPlayer = -this.currentPlayer;
+
+                    // Check if the game is over
+                    if (!this.hasValidMoves(this.currentPlayer)) {
+                        this.endGame();
+                        return;
+                    }
+
+                    this.updateStatus("Pas de coup valide, changement de joueur");
+                    this.showValidMoves();
+                    return;
+                }
+
+                this.showValidMoves();
+
+                // If current player is AI, make a move after a delay
+                if (this.currentPlayer === this.aiPlayer) {
+                    this.updateStatus(`Au tour du joueur ${this.aiPlayer === 1 ? 'Noir' : 'Blanc'} (IA)`);
+                    document.getElementById('thinking').style.display = 'block';
+
+                    setTimeout(() => {
+                        this.makeAIMove();
+                        document.getElementById('thinking').style.display = 'none';
+                    }, 500);
+                }
+            }
+
+            makeAIMove() {
+                const difficulty = document.getElementById('ai-difficulty').value;
+                let bestMove;
+
+                switch(difficulty) {
+                    case 'random':
+                        bestMove = this.getRandomMove();
+                        break;
+                    case 'easy':
+                        bestMove = this.minimaxMove(2); // Profondeur 2
+                        break;
+                    case 'medium':
+                        bestMove = this.minimaxMove(4); // Profondeur 4
+                        break;
+                    case 'hard':
+                        bestMove = this.minimaxMove(6); // Profondeur 6
+                        break;
+                    default:
+                        bestMove = this.minimaxMove(4);
+                }
+
+                if (bestMove) {
+                    // Place the piece and flip captured pieces
+                    const [row, col] = bestMove;
+                    this.board[row][col] = this.currentPlayer;
+                    this.flipPieces(row, col, this.currentPlayer);
+                    this.renderBoard();
+
+                    // Switch players
+                    this.currentPlayer = -this.currentPlayer;
+
+                    // Check if the next player can make a move
+                    if (!this.hasValidMoves(this.currentPlayer)) {
+                        // Skip turn if no valid moves
+                        this.currentPlayer = -this.currentPlayer;
+
+                        // Check if the game is over
+                        if (!this.hasValidMoves(this.currentPlayer)) {
+                            this.endGame();
+                            return;
+                        }
+
+                        this.updateStatus("Pas de coup valide, changement de joueur");
+                        this.showValidMoves();
+
+                        // If it's still AI's turn after skipping
+                        if (this.currentPlayer === this.aiPlayer) {
+                            setTimeout(() => {
+                                this.makeAIMove();
+                            }, 500);
+                        }
+                        return;
+                    }
+
+                    this.showValidMoves();
+                }
+            }
+
+            getRandomMove() {
+                const validMoves = this.getAllValidMoves(this.currentPlayer);
+
+                if (validMoves.length === 0) {
+                    return null;
+                }
+
+                return validMoves[Math.floor(Math.random() * validMoves.length)];
+            }
+
+            minimaxMove(depth) {
+                const validMoves = this.getAllValidMoves(this.currentPlayer);
+
+                if (validMoves.length === 0) {
+                    return null;
+                }
+
+                let bestScore = -Infinity;
+                let bestMove = null;
+
+                // Make a deep copy of the board for simulation
+                const boardCopy = JSON.parse(JSON.stringify(this.board));
+
+                for (const [row, col] of validMoves) {
+                    // Make the move on the board
+                    this.board[row][col] = this.currentPlayer;
+                    this.flipPieces(row, col, this.currentPlayer);
+
+                    // Get score using minimax algorithm
+                    const score = this.minimax(depth - 1, false, -Infinity, Infinity);
+
+                    // Restore the board
+                    this.board = JSON.parse(JSON.stringify(boardCopy));
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMove = [row, col];
+                    }
+                }
+
+                return bestMove;
+            }
+
+            minimax(depth, maximizing, alpha, beta) {
+                // Terminal states: depth reached or game over
+                if (depth === 0) {
+                    return this.evaluateBoard();
+                }
+
+                const player = maximizing ? this.currentPlayer : -this.currentPlayer;
+                const validMoves = this.getAllValidMoves(player);
+
+                // If no valid moves, check if the game is over or pass turn
+                if (validMoves.length === 0) {
+                    const otherPlayer = -player;
+                    // If other player also has no moves, game is over
+                    if (!this.hasValidMoves(otherPlayer)) {
+                        return this.getFinalScore(maximizing ? this.currentPlayer : -this.currentPlayer);
+                    }
+
+                    // Skip turn
+                    return this.minimax(depth - 1, !maximizing, alpha, beta);
+                }
+
+                // Store the original board state
+                const boardCopy = JSON.parse(JSON.stringify(this.board));
+
+                if (maximizing) {
+                    let maxScore = -Infinity;
+
+                    for (const [row, col] of validMoves) {
+                        // Make the move
+                        this.board[row][col] = player;
+                        this.flipPieces(row, col, player);
+
+                        // Recursive evaluation
+                        const score = this.minimax(depth - 1, false, alpha, beta);
+
+                        // Restore the board
+                        this.board = JSON.parse(JSON.stringify(boardCopy));
+
+                        maxScore = Math.max(maxScore, score);
+                        alpha = Math.max(alpha, score);
+
+                        if (beta <= alpha) {
+                            break; // Alpha-beta pruning
+                        }
+                    }
+
+                    return maxScore;
+                } else {
+                    let minScore = Infinity;
+
+                    for (const [row, col] of validMoves) {
+                        // Make the move
+                        this.board[row][col] = player;
+                        this.flipPieces(row, col, player);
+
+                        // Recursive evaluation
+                        const score = this.minimax(depth - 1, true, alpha, beta);
+
+                        // Restore the board
+                        this.board = JSON.parse(JSON.stringify(boardCopy));
+
+                        minScore = Math.min(minScore, score);
+                        beta = Math.min(beta, score);
+
+                        if (beta <= alpha) {
+                            break; // Alpha-beta pruning
+                        }
+                    }
+
+                    return minScore;
+                }
+            }
+
+            evaluateBoard() {
+                // AI player is this.aiPlayer
+                const aiPlayer = this.aiPlayer;
+                const humanPlayer = this.humanPlayer;
+
+                // Count pieces
+                let aiPieces = 0;
+                let humanPieces = 0;
+
+                // Positional score using weight matrix
+                let positionalScore = 0;
+
+                // Mobility score (number of possible moves)
+                const aiMoves = this.getAllValidMoves(aiPlayer).length;
+                const humanMoves = this.getAllValidMoves(humanPlayer).length;
+                const mobilityScore = 10 * (aiMoves - humanMoves);
+
+                // Corner control
+                const corners = [[0, 0], [0, 7], [7, 0], [7, 7]];
+                let cornerScore = 0;
+
+                // Process all cells
+                for (let row = 0; row < this.boardSize; row++) {
+                    for (let col = 0; col < this.boardSize; col++) {
+                        if (this.board[row][col] === aiPlayer) {
+                            aiPieces++;
+                            positionalScore += this.boardWeights[row][col];
+                        } else if (this.board[row][col] === humanPlayer) {
+                            humanPieces++;
+                            positionalScore -= this.boardWeights[row][col];
+                        }
+                    }
+                }
+
+                // Special bonus for controlling corners
+                for (const [row, col] of corners) {
+                    if (this.board[row][col] === aiPlayer) {
+                        cornerScore += 50;
+                    } else if (this.board[row][col] === humanPlayer) {
+                        cornerScore -= 50;
+                    }
+                }
+
+                // Early game: focus on position and mobility
+                // Late game: focus on piece count
+                const totalPieces = aiPieces + humanPieces;
+                const gameProgress = totalPieces / 64; // 0 to 1
+
+                // Adjust weights based on game phase
+                const pieceWeight = gameProgress * 2; // More important later
+                const positionWeight = 1 - (gameProgress * 0.5); // Less important later
+
+                // Final weighted score
+                return (aiPieces - humanPieces) * pieceWeight * 10 +
+                       positionalScore * positionWeight +
+                       mobilityScore +
+                       cornerScore;
+            }
+
+            getFinalScore(player) {
+                let playerPieces = 0;
+                let opponentPieces = 0;
+
+                for (let row = 0; row < this.boardSize; row++) {
+                    for (let col = 0; col < this.boardSize; col++) {
+                        if (this.board[row][col] === player) {
+                            playerPieces++;
+                        } else if (this.board[row][col] === -player) {
+                            opponentPieces++;
+                        }
+                    }
+                }
+
+                if (playerPieces > opponentPieces) {
+                    return 10000; // Win
+                } else if (playerPieces < opponentPieces) {
+                    return -10000; // Loss
+                } else {
+                    return 0; // Draw
+                }
+            }
+
+            updateScores() {
+                let blackCount = 0;
+                let whiteCount = 0;
+
+                for (let row = 0; row < this.boardSize; row++) {
+                    for (let col = 0; col < this.boardSize; col++) {
+                        if (this.board[row][col] === 1) {
+                            blackCount++;
+                        } else if (this.board[row][col] === -1) {
+                            whiteCount++;
+                        }
+                    }
+                }
+
+                document.getElementById('black-score').textContent = blackCount;
+                document.getElementById('white-score').textContent = whiteCount;
+            }
+
+            updateStatus(message) {
+                const statusElement = document.getElementById('reversi-status');
+
+                if (message) {
+                    statusElement.textContent = message;
+                    return;
+                }
+
+                const playerColorText = this.currentPlayer === 1 ? "Noir" : "Blanc";
+                const playerTypeText = this.currentPlayer === this.humanPlayer ? "(vous)" : "(IA)";
+
+                statusElement.textContent = `Au tour du joueur ${playerColorText} ${playerTypeText}`;
+            }
+
+            endGame() {
+                let blackCount = 0;
+                let whiteCount = 0;
+
+                for (let row = 0; row < this.boardSize; row++) {
+                    for (let col = 0; col < this.boardSize; col++) {
+                        if (this.board[row][col] === 1) {
+                            blackCount++;
+                        } else if (this.board[row][col] === -1) {
+                            whiteCount++;
+                        }
+                    }
+                }
+
+                let message;
+                if (blackCount > whiteCount) {
+                    message = `Partie terminée ! Noir ${this.humanPlayer === 1 ? "(vous)" : "(IA)"} gagne !`;
+                } else if (whiteCount > blackCount) {
+                    message = `Partie terminée ! Blanc ${this.humanPlayer === -1 ? "(vous)" : "(IA)"} gagne !`;
+                } else {
+                    message = "Partie terminée ! Match nul !";
+                }
+
+                this.updateStatus(message);
+            }
+
+            resetGame() {
+                this.initBoard();
+                this.renderBoard();
+                this.showValidMoves();
+
+                // If AI is set to go first, make an AI move
+                if (this.currentPlayer === this.aiPlayer) {
+                    setTimeout(() => this.makeAIMove(), 500);
+                }
+            }
+        }
+
+        // Initialize game when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            const reversi = new Reversi();
+        });
+    </script>
+</body>
+</html>

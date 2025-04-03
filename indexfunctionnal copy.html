@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reversi</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1, h2 {
+            text-align: center;
+        }
+
+        /* Reversi Styles */
+        #reversi-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #reversi-board {
+            display: grid;
+            grid-template-columns: repeat(8, 50px);
+            gap: 2px;
+            background-color: #333;
+            border: 5px solid #333;
+            margin-top: 20px;
+        }
+
+        .reversi-cell {
+            width: 50px;
+            height: 50px;
+            background-color: #1a8c1a;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .reversi-cell.valid-move::before {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .reversi-cell::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            transition: all 0.3s;
+        }
+
+        .reversi-cell.white::after {
+            background-color: white;
+        }
+
+        .reversi-cell.black::after {
+            background-color: black;
+        }
+
+        #reversi-score {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+            font-size: 1.2em;
+            width: 100%;
+            max-width: 416px;
+        }
+
+        #reversi-status {
+            margin-top: 10px;
+            font-weight: bold;
+            height: 1.5em;
+        }
+
+        .ai-controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .ai-controls select {
+            padding: 5px;
+            border-radius: 5px;
+        }
+
+        .game-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 15px;
+            justify-content: center;
+        }
+
+        button {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        #thinking {
+            display: none;
+            margin-top: 10px;
+            font-style: italic;
+            color: #666;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #4CAF50;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        .hint-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .player-select {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .player-option {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .player-option label {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+
+        .player-icon {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+        }
+
+        .player-icon.black {
+            background-color: black;
+        }
+
+        .player-icon.white {
+            background-color: white;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <h1>Reversi</h1>
+
+    <div id="reversi-container">
+        <p>Placez vos pions pour capturer ceux de l'adversaire.</p>
+        <div id="reversi-score">
+            <div>Noir: <span id="black-score">2</span></div>
+            <div>Blanc: <span id="white-score">2</span></div>
+        </div>
+        <div id="reversi-status"></div>
+        <div id="thinking">L'IA réfléchit...</div>
+        <div id="reversi-board"></div>
+        <div class="game-options">
+            <div class="player-select">
+                <span>Joueur 1 (premier):</span>
+                <div class="player-option">
+                    <label>
+                        <input type="radio" name="first-player" value="human" checked>
+                        <span class="player-icon black"></span>
+                        Vous
+                    </label>
+                    <label>
+                        <input type="radio" name="first-player" value="ai">
+                        <span class="player-icon white"></span>
+                        IA
+                    </label>
+                </div>
+            </div>
+            <div class="ai-controls">
+                <label for="ai-difficulty">Difficulté:</label>
+                <select id="ai-difficulty">
+                    <option value="random">Aléatoire</option>
+                    <option value="easy">Facile</option>
+                    <option value="medium" selected>Moyenne</option>
+                    <option value="hard">Difficile</option>
+                </select>
+            </div>
+            <div class="hint-option">
+                <label class="switch">
+                    <input type="checkbox" id="show-hints" checked>
+                    <span class="slider"></span>
+                </label>
+                <span>Afficher coups possibles</span>
+            </div>
+        </div>
+        <button id="reset-reversi">Nouvelle partie</button>
+    </div>
+
+    <script>
+        // ================ REVERSI IMPLEMENTATION - FUNCTIONAL APPROACH ================
+
+        // State du jeu (variables globales)
+        const gameState = {
+            boardSize: 8,
+            board: [],
+            currentPlayer: 1, // 1 = black, -1 = white
+            humanPlayer: 1,   // Default: human plays black
+            aiPlayer: -1,     // Default: AI plays white
+            showHints: true
+        };
+
+        // Constantes
+        const directions = [
+            [-1, -1], [-1, 0], [-1, 1],
+            [0, -1],           [0, 1],
+            [1, -1],  [1, 0],  [1, 1]
+        ];
+
+        // Weights for minimax evaluation
+        const boardWeights = [
+            [120, -20, 20, 5, 5, 20, -20, 120],
+            [-20, -40, -5, -5, -5, -5, -40, -20],
+            [20, -5, 15, 3, 3, 15, -5, 20],
+            [5, -5, 3, 3, 3, 3, -5, 5],
+            [5, -5, 3, 3, 3, 3, -5, 5],
+            [20, -5, 15, 3, 3, 15, -5, 20],
+            [-20, -40, -5, -5, -5, -5, -40, -20],
+            [120, -20, 20, 5, 5, 20, -20, 120]
+        ];
+
+        // Fonctions d'initialisation
+        function initGame() {
+            // Setup event listeners
+            document.getElementById('reset-reversi').addEventListener('click', resetGame);
+            document.getElementById('show-hints').addEventListener('change', (e) => {
+                gameState.showHints = e.target.checked;
+                showValidMoves();
+            });
+
+            // Add event listeners for player selection
+            document.querySelectorAll('input[name="first-player"]').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    setFirstPlayer(e.target.value);
+                });
+            });
+
+            gameState.showHints = document.getElementById('show-hints').checked;
+
+            initBoard();
+            renderBoard();
+            showValidMoves();
+
+            // If AI is set to go first, make an AI move
+            if (gameState.currentPlayer === gameState.aiPlayer) {
+                setTimeout(makeAIMove, 500);
+            }
+        }
+
+        function setFirstPlayer(playerType) {
+            if (playerType === 'human') {
+                gameState.humanPlayer = 1;  // Human plays black
+                gameState.aiPlayer = -1;    // AI plays white
+            } else {
+                gameState.humanPlayer = -1; // Human plays white
+                gameState.aiPlayer = 1;     // AI plays black
+            }
+
+            resetGame();
+        }
+
+        function initBoard() {
+            // Clear the board
+            gameState.board = Array(gameState.boardSize).fill().map(() => Array(gameState.boardSize).fill(0));
+
+            // Set up initial pieces
+            const mid = gameState.boardSize / 2 - 1;
+            gameState.board[mid][mid] = -1;       // White
+            gameState.board[mid][mid + 1] = 1;    // Black
+            gameState.board[mid + 1][mid] = 1;    // Black
+            gameState.board[mid + 1][mid + 1] = -1; // White
+
+            gameState.currentPlayer = 1; // Black starts
+
+            // Create the board UI
+            const boardElement = document.getElementById('reversi-board');
+            boardElement.innerHTML = '';
+
+            for (let row = 0; row < gameState.boardSize; row++) {
+                for (let col = 0; col < gameState.boardSize; col++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('reversi-cell');
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+
+                    cell.addEventListener('click', (e) => {
+                        const cellRow = parseInt(e.target.dataset.row);
+                        const cellCol = parseInt(e.target.dataset.col);
+                        makeMove(cellRow, cellCol);
+                    });
+
+                    boardElement.appendChild(cell);
+                }
+            }
+
+            updateScores();
+            updateStatus();
+        }
+
+        // Fonctions de rendu et d'affichage
+        function renderBoard() {
+            for (let row = 0; row < gameState.boardSize; row++) {
+                for (let col = 0; col < gameState.boardSize; col++) {
+                    const cell = document.querySelector(`.reversi-cell[data-row="${row}"][data-col="${col}"]`);
+                    cell.classList.remove('black', 'white', 'valid-move');
+
+                    if (gameState.board[row][col] === 1) {
+                        cell.classList.add('black');
+                    } else if (gameState.board[row][col] === -1) {
+                        cell.classList.add('white');
+                    }
+                }
+            }
+
+            updateScores();
+            updateStatus();
+        }
+
+        function updateScores() {
+            let blackCount = 0;
+            let whiteCount = 0;
+
+            for (let row = 0; row < gameState.boardSize; row++) {
+                for (let col = 0; col < gameState.boardSize; col++) {
+                    if (gameState.board[row][col] === 1) {
+                        blackCount++;
+                    } else if (gameState.board[row][col] === -1) {
+                        whiteCount++;
+                    }
+                }
+            }
+
+            document.getElementById('black-score').textContent = blackCount;
+            document.getElementById('white-score').textContent = whiteCount;
+        }
+
+        function updateStatus(message) {
+            const statusElement = document.getElementById('reversi-status');
+            if (message) {
+                statusElement.textContent = message;
+            } else {
+                const currentPlayerColor = gameState.currentPlayer === 1 ? "Noir" : "Blanc";
+                const playerType = gameState.currentPlayer === gameState.humanPlayer ? "Vous" : "IA";
+                statusElement.textContent = `Au tour du joueur ${currentPlayerColor} (${playerType})`;
+            }
+        }
+
+        function showValidMoves() {
+            // Remove all valid move indicators
+            document.querySelectorAll('.reversi-cell').forEach(cell => {
+                cell.classList.remove('valid-move');
+            });
+
+            if (!gameState.showHints) return;
+
+            // Show valid moves for current player
+            const validMoves = getAllValidMoves(gameState.currentPlayer);
+
+            for (const [row, col] of validMoves) {
+                const cell = document.querySelector(`.reversi-cell[data-row="${row}"][data-col="${col}"]`);
+                cell.classList.add('valid-move');
+            }
+        }
+
+        // Fonctions de mécanique de jeu
+        function isValidMove(row, col, player) {
+            // Already occupied
+            if (gameState.board[row][col] !== 0) {
+                return false;
+            }
+
+            let validMove = false;
+
+            for (const [dr, dc] of directions) {
+                let r = row + dr;
+                let c = col + dc;
+                let foundOpponent = false;
+
+                while (r >= 0 && r < gameState.boardSize && c >= 0 && c < gameState.boardSize) {
+                    if (gameState.board[r][c] === 0) {
+                        break;
+                    }
+
+                    if (gameState.board[r][c] === -player) {
+                        foundOpponent = true;
+                    } else if (gameState.board[r][c] === player && foundOpponent) {
+                        validMove = true;
+                        break;
+                    } else {
+                        break;
+                    }
+
+                    r += dr;
+                    c += dc;
+                }
+
+                if (validMove) break;
+            }
+
+            return validMove;
+        }
+
+        function getFlippedPieces(row, col, player, actuallyFlip = false) {
+            let flippedCount = 0;
+
+            for (const [dr, dc] of directions) {
+                let r = row + dr;
+                let c = col + dc;
+                let toFlip = [];
+
+                while (r >= 0 && r < gameState.boardSize && c >= 0 && c < gameState.boardSize) {
+                    if (gameState.board[r][c] === 0) {
+                        break;
+                    }
+
+                    if (gameState.board[r][c] === -player) {
+                        toFlip.push([r, c]);
+                    } else if (gameState.board[r][c] === player) {
+                        // Flip all pieces in this direction
+                        if (actuallyFlip) {
+                            for (const [flipRow, flipCol] of toFlip) {
+                                gameState.board[flipRow][flipCol] = player;
+                            }
+                        }
+                        flippedCount += toFlip.length;
+                        break;
+                    } else {
+                        break;
+                    }
+
+                    r += dr;
+                    c += dc;
+                }
+            }
+
+            return flippedCount;
+        }
+
+        function flipPieces(row, col, player) {
+            getFlippedPieces(row, col, player, true);
+        }
+
+        function getAllValidMoves(player) {
+            const validMoves = [];
+
+            for (let row = 0; row < gameState.boardSize; row++) {
+                for (let col = 0; col < gameState.boardSize; col++) {
+                    if (isValidMove(row, col, player)) {
+                        validMoves.push([row, col]);
+                    }
+                }
+            }
+
+            return validMoves;
+        }
+
+        function hasValidMoves(player) {
+            return getAllValidMoves(player).length > 0;
+        }
+
+        function makeMove(row, col) {
+            // Prevent player from making move if it's AI's turn
+            if (gameState.currentPlayer === gameState.aiPlayer) {
+                return;
+            }
+
+            if (!isValidMove(row, col, gameState.currentPlayer)) {
+                return;
+            }
+
+            // Place the piece and flip captured pieces
+            gameState.board[row][col] = gameState.currentPlayer;
+            flipPieces(row, col, gameState.currentPlayer);
+            renderBoard();
+
+            // Switch players
+            gameState.currentPlayer = -gameState.currentPlayer;
+
+            // Check if the next player can make a move
+            if (!hasValidMoves(gameState.currentPlayer)) {
+                // Skip turn if no valid moves
+                gameState.currentPlayer = -gameState.currentPlayer;
+
+                // Check if the game is over
+                if (!hasValidMoves(gameState.currentPlayer)) {
+                    endGame();
+                    return;
+                }
+
+                updateStatus("Pas de coup valide, changement de joueur");
+                showValidMoves();
+                return;
+            }
+
+            showValidMoves();
+
+            // If current player is AI, make a move after a delay
+            if (gameState.currentPlayer === gameState.aiPlayer) {
+                updateStatus(`Au tour du joueur ${gameState.aiPlayer === 1 ? 'Noir' : 'Blanc'} (IA)`);
+                document.getElementById('thinking').style.display = 'block';
+
+                setTimeout(() => {
+                    makeAIMove();
+                    document.getElementById('thinking').style.display = 'none';
+                }, 500);
+            }
+        }
+
+        // Fonctions de l'IA
+        function makeAIMove() {
+            const difficulty = document.getElementById('ai-difficulty').value;
+            let bestMove;
+
+            switch(difficulty) {
+                case 'random':
+                    bestMove = getRandomMove();
+                    break;
+                case 'easy':
+                    bestMove = minimaxMove(2); // Profondeur 2
+                    break;
+                case 'medium':
+                    bestMove = minimaxMove(4); // Profondeur 4
+                    break;
+                case 'hard':
+                    bestMove = minimaxMove(6); // Profondeur 6
+                    break;
+                default:
+                    bestMove = minimaxMove(4);
+            }
+
+            if (bestMove) {
+                // Place the piece and flip captured pieces
+                const [row, col] = bestMove;
+                gameState.board[row][col] = gameState.currentPlayer;
+                flipPieces(row, col, gameState.currentPlayer);
+                renderBoard();
+
+                // Switch players
+                gameState.currentPlayer = -gameState.currentPlayer;
+
+                // Check if the next player can make a move
+                if (!hasValidMoves(gameState.currentPlayer)) {
+                    // Skip turn if no valid moves
+                    gameState.currentPlayer = -gameState.currentPlayer;
+
+                    // Check if the game is over
+                    if (!hasValidMoves(gameState.currentPlayer)) {
+                        endGame();
+                        return;
+                    }
+
+                    updateStatus("Pas de coup valide, changement de joueur");
+                    showValidMoves();
+
+                    // If it's still AI's turn after skipping
+                    if (gameState.currentPlayer === gameState.aiPlayer) {
+                        setTimeout(makeAIMove, 500);
+                    }
+                    return;
+                }
+
+                showValidMoves();
+            }
+        }
+
+        function getRandomMove() {
+            const validMoves = getAllValidMoves(gameState.currentPlayer);
+
+            if (validMoves.length > 0) {
+                const randomIndex = Math.floor(Math.random() * validMoves.length);
+                return validMoves[randomIndex];
+            }
+
+            return null;
+        }
+
+        function evaluateBoard(board, player) {
+            let score = 0;
+
+            // Position-based scoring
+            for (let row = 0; row < gameState.boardSize; row++) {
+                for (let col = 0; col < gameState.boardSize; col++) {
+                    if (board[row][col] === player) {
+                        score += boardWeights[row][col];
+                    } else if (board[row][col] === -player) {
+                        score -= boardWeights[row][col];
+                    }
+                }
+            }
+
+            return score;
+        }
+
+        function minimaxMove(depth) {
+            const validMoves = getAllValidMoves(gameState.currentPlayer);
+
+            if (validMoves.length === 0) {
+                return null;
+            }
+
+            let bestScore = -Infinity;
+            let bestMove = null;
+
+            // Create a copy of the board for simulation
+            const boardCopy = gameState.board.map(row => [...row]);
+
+            for (const [row, col] of validMoves) {
+                const newBoard = simulateMove(boardCopy, row, col, gameState.currentPlayer);
+                const score = minimax(newBoard, depth - 1, -Infinity, Infinity, false, gameState.currentPlayer);
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMove = [row, col];
+                }
+            }
+
+            return bestMove;
+        }
+
+        function minimax(board, depth, alpha, beta, isMaximizing, originalPlayer) {
+            // If we've reached the target depth or the game is over, evaluate the board
+            if (depth === 0) {
+                return evaluateBoard(board, originalPlayer);
+            }
+
+            const currentPlayer = isMaximizing ? originalPlayer : -originalPlayer;
+            const validMoves = getValidMovesForBoard(board, currentPlayer);
+
+            if (validMoves.length === 0) {
+                // Check if the game is over (no valid moves for either player)
+                const oppositePlayer = -currentPlayer;
+                if (getValidMovesForBoard(board, oppositePlayer).length === 0) {
+                    // Game is over, count pieces
+                    return countPiecesForBoard(board, originalPlayer);
+                }
+
+                // Skip turn
+                return minimax(board, depth - 1, alpha, beta, !isMaximizing, originalPlayer);
+            }
+
+            if (isMaximizing) {
+                let maxEval = -Infinity;
+
+                for (const [row, col] of validMoves) {
+                    const newBoard = simulateMove(board.map(row => [...row]), row, col, currentPlayer);
+                    const evaluation = minimax(newBoard, depth - 1, alpha, beta, false, originalPlayer);
+                    maxEval = Math.max(maxEval, evaluation);
+                    alpha = Math.max(alpha, evaluation);
+                    if (beta <= alpha) break; // Alpha-beta pruning
+                }
+
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+
+                for (const [row, col] of validMoves) {
+                    const newBoard = simulateMove(board.map(row => [...row]), row, col, currentPlayer);
+                    const evaluation = minimax(newBoard, depth - 1, alpha, beta, true, originalPlayer);
+                    minEval = Math.min(minEval, evaluation);
+                    beta = Math.min(beta, evaluation);
+                    if (beta <= alpha) break; // Alpha-beta pruning
+                }
+
+                return minEval;
+            }
+        }
+
+        function simulateMove(board, row, col, player) {
+            // Make a copy of the board
+            const newBoard = board.map(row => [...row]);
+
+            // Place the piece
+            newBoard[row][col] = player;
+
+            // Flip pieces
+            for (const [dr, dc] of directions) {
+                let r = row + dr;
+                let c = col + dc;
+                let toFlip = [];
+
+                while (r >= 0 && r < gameState.boardSize && c >= 0 && c < gameState.boardSize) {
+                    if (newBoard[r][c] === 0) {
+                        break;
+                    }
+
+                    if (newBoard[r][c] === -player) {
+                        toFlip.push([r, c]);
+                    } else if (newBoard[r][c] === player) {
+                        // Flip all pieces in this direction
+                        for (const [flipRow, flipCol] of toFlip) {
+                            newBoard[flipRow][flipCol] = player;
+                        }
+                        break;
+                    } else {
+                        break;
+                    }
+
+                    r += dr;
+                    c += dc;
+                }
+            }
+
+            return newBoard;
+        }
+
+        function getValidMovesForBoard(board, player) {
+            const validMoves = [];
+
+            for (let row = 0; row < gameState.boardSize; row++) {
+                for (let col = 0; col < gameState.boardSize; col++) {
+                    if (isValidMoveForBoard(board, row, col, player)) {
+                        validMoves.push([row, col]);
+                    }
+                }
+            }
+
+            return validMoves;
+        }
+
+        function isValidMoveForBoard(board, row, col, player) {
+            // Already occupied
+            if (board[row][col] !== 0) {
+                return false;
+            }
+
+            let validMove = false;
+
+            for (const [dr, dc] of directions) {
+                let r = row + dr;
+                let c = col + dc;
+                let foundOpponent = false;
+
+                while (r >= 0 && r < gameState.boardSize && c >= 0 && c < gameState.boardSize) {
+                    if (board[r][c] === 0) {
+                        break;
+                    }
+
+                    if (board[r][c] === -player) {
+                        foundOpponent = true;
+                    } else if (board[r][c] === player && foundOpponent) {
+                        validMove = true;
+                        break;
+                    } else {
+                        break;
+                    }
+
+                    r += dr;
+                    c += dc;
+                }
+
+                if (validMove) break;
+            }
+
+            return validMove;
+        }
+
+        function countPiecesForBoard(board, player) {
+            let playerCount = 0;
+            let opponentCount = 0;
+
+            for (let row = 0; row < gameState.boardSize; row++) {
+                for (let col = 0; col < gameState.boardSize; col++) {
+                    if (board[row][col] === player) {
+                        playerCount++;
+                    } else if (board[row][col] === -player) {
+                        opponentCount++;
+                    }
+                }
+            }
+
+            // Return a large positive number for a win, large negative for a loss,
+            // or the difference for a close game
+            if (playerCount > opponentCount) {
+                return 1000 + (playerCount - opponentCount);
+            } else if (opponentCount > playerCount) {
+                return -1000 - (opponentCount - playerCount);
+            } else {
+                return 0;
+            }
+        }
+
+        // Fonctions de gestion de la partie
+        function resetGame() {
+            initBoard();
+            renderBoard();
+            showValidMoves();
+
+            // If AI is set to go first, make an AI move
+            if (gameState.currentPlayer === gameState.aiPlayer) {
+                setTimeout(makeAIMove, 500);
+            }
+        }
+
+        function endGame() {
+            let blackCount = 0;
+            let whiteCount = 0;
+
+            for (let row = 0; row < gameState.boardSize; row++) {
+                for (let col = 0; col < gameState.boardSize; col++) {
+                    if (gameState.board[row][col] === 1) {
+                        blackCount++;
+                    } else if (gameState.board[row][col] === -1) {
+                        whiteCount++;
+                    }
+                }
+            }
+
+            let message;
+            if (blackCount > whiteCount) {
+                message = `Partie terminée ! Noir gagne ${blackCount} à ${whiteCount}`;
+            } else if (whiteCount > blackCount) {
+                message = `Partie terminée ! Blanc gagne ${whiteCount} à ${blackCount}`;
+            } else {
+                message = `Partie terminée ! Match nul ${blackCount} à ${whiteCount}`;
+            }
+
+            updateStatus(message);
+        }
+
+        // Initialisation du jeu au chargement
+        window.addEventListener('DOMContentLoaded', initGame);
+    </script>
+</body>
+</html>
