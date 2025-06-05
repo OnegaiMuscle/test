@@ -1,842 +1,254 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TodoList Hexagonale Fonctionnelle</title>
-    <style>
-        :root {
-            --primary-color: #4a6fa5;
-            --secondary-color: #166088;
-            --background-color: #f5f7fa;
-            --text-color: #333;
-            --accent-color: #e74c3c;
-            --success-color: #27ae60;
-            --modal-overlay: rgba(0, 0, 0, 0.5);
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-
-        body {
-            background-color: var(--background-color);
-            color: var(--text-color);
-            min-height: 100vh;
-            padding: 2rem;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 600px;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-            padding: 1.5rem;
-        }
-
-        h1 {
-            color: var(--primary-color);
-            text-align: center;
-            margin-bottom: 1.5rem;
-        }
-
-        .task-input-container {
-            display: flex;
-            margin-bottom: 1.5rem;
-        }
-
-        .task-input {
-            flex: 1;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 5px 0 0 5px;
-            font-size: 1rem;
-            outline: none;
-            transition: border-color 0.3s;
-        }
-
-        .task-input:focus {
-            border-color: var(--primary-color);
-        }
-
-        .add-button {
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            border-radius: 0 5px 5px 0;
-            padding: 0 1.5rem;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-
-        .add-button:hover {
-            background-color: var(--secondary-color);
-        }
-
-        .task-list {
-            list-style-type: none;
-        }
-
-        .task-item {
-            display: flex;
-            align-items: center;
-            padding: 1rem;
-            border-bottom: 1px solid #eee;
-            animation: fadeIn 0.3s ease;
-            background-color: white;
-            cursor: grab;
-        }
-
-        .task-item.dragging {
-            opacity: 0.5;
-            cursor: grabbing;
-        }
-
-        .task-item.drag-over {
-            border-top: 2px solid var(--primary-color);
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .task-checkbox {
-            margin-right: 1rem;
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
-        }
-
-        .task-text {
-            flex: 1;
-            word-break: break-word;
-            transition: text-decoration 0.3s, color 0.3s;
-            cursor: pointer;
-        }
-
-        .task-text:hover {
-            color: var(--primary-color);
-        }
-
-        .completed .task-text {
-            text-decoration: line-through;
-            color: #888;
-        }
-
-        .task-actions {
-            display: flex;
-            gap: 5px;
-        }
-
-        .edit-button, .delete-button {
-            border: none;
-            border-radius: 4px;
-            padding: 5px 10px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-
-        .edit-button {
-            background-color: var(--secondary-color);
-            color: white;
-        }
-
-        .edit-button:hover {
-            background-color: #0d4d6d;
-        }
-
-        .delete-button {
-            background-color: var(--accent-color);
-            color: white;
-        }
-
-        .delete-button:hover {
-            background-color: #c0392b;
-        }
-
-        .empty-message {
-            text-align: center;
-            color: #888;
-            padding: 1rem;
-        }
-
-        /* Modal styles */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: var(--modal-overlay);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.3s, visibility 0.3s;
-        }
-
-        .modal-overlay.active {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        .modal {
-            background-color: white;
-            border-radius: 10px;
-            width: 90%;
-            max-width: 500px;
-            padding: 1.5rem;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-            transform: translateY(-20px);
-            transition: transform 0.3s;
-        }
-
-        .modal-overlay.active .modal {
-            transform: translateY(0);
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-
-        .modal-title {
-            color: var(--primary-color);
-            font-size: 1.2rem;
-        }
-
-        .modal-close {
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-            cursor: pointer;
-            color: #777;
-        }
-
-        .modal-body {
-            margin-bottom: 1.5rem;
-        }
-
-        .modal-textarea {
-            width: 100%;
-            min-height: 150px;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 1rem;
-            resize: vertical;
-            outline: none;
-        }
-
-        .modal-textarea:focus {
-            border-color: var(--primary-color);
-        }
-
-        .modal-footer {
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .modal-button {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-
-        .modal-save {
-            background-color: var(--primary-color);
-            color: white;
-        }
-
-        .modal-save:hover {
-            background-color: var(--secondary-color);
-        }
-
-        .modal-dictate {
-            background-color: var(--success-color);
-            color: white;
-        }
-
-        .modal-dictate:hover {
-            background-color: #219653;
-        }
-
-        .modal-dictate.listening {
-            background-color: var(--accent-color);
-            animation: pulse 1.5s infinite;
-        }
-
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.7; }
-            100% { opacity: 1; }
-        }
-
-        @media (max-width: 480px) {
-            .container {
-                padding: 1rem;
-            }
-
-            .task-input {
-                padding: 10px;
-            }
-
-            .task-item {
-                padding: 0.75rem;
-            }
-
-            .modal {
-                padding: 1rem;
-            }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Mario Scroll Infini</title>
+  <style>
+    body {
+      margin: 0;
+      background: #222;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: sans-serif;
+    }
+    #viewport {
+      width: 256px;
+      height: 144px;
+      overflow: hidden;
+      position: relative;
+      background: skyblue;
+      border: 2px solid #000;
+    }
+    #world {
+      position: absolute;
+      height: 100%;
+    }
+    .tile, #mario, .enemy {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+    }
+    .ground { background: brown; }
+    .platform { background: #c44; }
+    #mario { background: red; z-index: 10; }
+    .enemy { background: green; z-index: 9; }
+    #controls {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      padding: 20px;
+      font-size: 18px;
+      border-radius: 8px;
+      border: none;
+      background: #444;
+      color: white;
+    }
+    button:active { background: #666; }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Ma TodoList</h1>
-        <div class="task-input-container">
-            <input type="text" class="task-input" id="taskInput" placeholder="Ajouter une tâche...">
-            <button class="add-button" id="addButton">Ajouter</button>
-        </div>
-        <ul class="task-list" id="taskList">
-            <!-- Les tâches seront générées ici -->
-        </ul>
-    </div>
 
-    <!-- Modal pour éditer/dicter le contenu des tâches -->
-    <div class="modal-overlay" id="taskModal">
-        <div class="modal">
-            <div class="modal-header">
-                <h3 class="modal-title">Modifier la tâche</h3>
-                <button class="modal-close" id="modalClose">&times;</button>
-            </div>
-            <div class="modal-body">
-                <textarea class="modal-textarea" id="taskTextarea" placeholder="Entrez le contenu de la tâche..."></textarea>
-            </div>
-            <div class="modal-footer">
-                <button class="modal-button modal-dictate" id="dictateButton">
-                    <i class="fa fa-microphone"></i> Dicter
-                </button>
-                <button class="modal-button modal-save" id="saveTaskButton">Enregistrer</button>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // Architecture hexagonale fonctionnelle pour TodoList
-        // 1. Domaine (entités et fonctions pures)
-        // 2. Ports (fonctions d'interface)
-        // 3. Adaptateurs (implémentations des ports)
-        // 4. Application (orchestration des interactions)
-
-        // Domaine: Fonctions pures pour manipuler les tâches
-        const domain = (() => {
-            // Créer une nouvelle tâche
-            const createTask = (id, text, completed = false, order = 0) => ({
-                id,
-                text,
-                completed,
-                order
-            });
-
-            // Basculer l'état d'une tâche (fonction pure)
-            const toggleTaskCompletion = task => ({
-                ...task,
-                completed: !task.completed
-            });
-
-            // Mettre à jour le contenu d'une tâche (fonction pure)
-            const updateTaskText = (task, newText) => ({
-                ...task,
-                text: newText
-            });
-
-            // Mettre à jour l'ordre d'une tâche (fonction pure)
-            const updateTaskOrder = (task, newOrder) => ({
-                ...task,
-                order: newOrder
-            });
-
-            // Reordonner une liste de tâches (fonction pure)
-            const reorderTasks = (tasks, sourceId, targetId) => {
-                const sourceIndex = tasks.findIndex(task => task.id === sourceId);
-                const targetIndex = tasks.findIndex(task => task.id === targetId);
-
-                if (sourceIndex === -1 || targetIndex === -1) return [...tasks];
-
-                const result = [...tasks];
-                const [removed] = result.splice(sourceIndex, 1);
-                result.splice(targetIndex, 0, removed);
-
-                // Mettre à jour l'ordre de toutes les tâches
-                return result.map((task, index) => ({
-                    ...task,
-                    order: index
-                }));
-            };
-
-            return {
-                createTask,
-                toggleTaskCompletion,
-                updateTaskText,
-                updateTaskOrder,
-                reorderTasks
-            };
-        })();
-
-        // Ports: Définition des interfaces
-        const ports = {
-            // Interface de stockage
-            taskRepository: {
-                saveTasks: tasks => {},
-                loadTasks: () => {}
-            },
-
-            // Interface UI
-            taskUI: {
-                displayTasks: tasks => {},
-                getNewTaskText: () => {},
-                clearNewTaskInput: () => {},
-                showTaskModal: (taskId, text) => {},
-                hideTaskModal: () => {},
-                getTaskModalText: () => {}
-            },
-
-            // Interface de reconnaissance vocale
-            speechRecognition: {
-                start: () => {},
-                stop: () => {},
-                onResult: callback => {}
-            }
-        };
-
-        // Adaptateur de stockage: Implémentation avec localStorage
-        const localStorageAdapter = (() => {
-            const STORAGE_KEY = 'functional-hexagonal-todolist';
-
-            const saveTasks = tasks => {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-                return tasks; // Pour faciliter la composition de fonctions
-            };
-
-            const loadTasks = () => {
-                const tasksJson = localStorage.getItem(STORAGE_KEY);
-                return tasksJson ? JSON.parse(tasksJson) : [];
-            };
-
-            return {
-                saveTasks,
-                loadTasks
-            };
-        })();
-
-        // Adaptateur UI: Implémentation avec le DOM
-        const domAdapter = (() => {
-            const elements = {
-                taskInput: document.getElementById('taskInput'),
-                addButton: document.getElementById('addButton'),
-                taskList: document.getElementById('taskList'),
-                taskModal: document.getElementById('taskModal'),
-                modalClose: document.getElementById('modalClose'),
-                taskTextarea: document.getElementById('taskTextarea'),
-                saveTaskButton: document.getElementById('saveTaskButton'),
-                dictateButton: document.getElementById('dictateButton')
-            };
-
-            let currentEditingTaskId = null;
-
-            const createTaskElement = task => {
-                const li = document.createElement('li');
-                li.className = `task-item ${task.completed ? 'completed' : ''}`;
-                li.dataset.id = task.id;
-                li.draggable = true;
-
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.className = 'task-checkbox';
-                checkbox.checked = task.completed;
-
-                const span = document.createElement('span');
-                span.className = 'task-text';
-                span.textContent = task.text;
-
-                const actionsDiv = document.createElement('div');
-                actionsDiv.className = 'task-actions';
-
-                const editButton = document.createElement('button');
-                editButton.className = 'edit-button';
-                editButton.innerHTML = '<i class="fa fa-pencil"></i> Éditer';
-
-                const deleteButton = document.createElement('button');
-                deleteButton.className = 'delete-button';
-                deleteButton.innerHTML = '<i class="fa fa-trash"></i> Supprimer';
-
-                actionsDiv.appendChild(editButton);
-                actionsDiv.appendChild(deleteButton);
-
-                li.appendChild(checkbox);
-                li.appendChild(span);
-                li.appendChild(actionsDiv);
-
-                // Ajouter les gestionnaires d'événements pour le drag and drop
-                li.addEventListener('dragstart', e => {
-                    li.classList.add('dragging');
-                    e.dataTransfer.setData('text/plain', task.id);
-                });
-
-                li.addEventListener('dragend', () => {
-                    li.classList.remove('dragging');
-                });
-
-                li.addEventListener('dragover', e => {
-                    e.preventDefault();
-                    li.classList.add('drag-over');
-                });
-
-                li.addEventListener('dragleave', () => {
-                    li.classList.remove('drag-over');
-                });
-
-                li.addEventListener('drop', e => {
-                    e.preventDefault();
-                    li.classList.remove('drag-over');
-                    const draggedTaskId = e.dataTransfer.getData('text/plain');
-                    if (draggedTaskId !== task.id) {
-                        const event = new CustomEvent('task-reordered', {
-                            detail: {
-                                sourceId: draggedTaskId,
-                                targetId: task.id
-                            }
-                        });
-                        document.dispatchEvent(event);
-                    }
-                });
-
-                return li;
-            };
-
-            const displayTasks = tasks => {
-                elements.taskList.innerHTML = '';
-
-                if (tasks.length === 0) {
-                    const emptyMessage = document.createElement('p');
-                    emptyMessage.className = 'empty-message';
-                    emptyMessage.textContent = 'Aucune tâche pour le moment';
-                    elements.taskList.appendChild(emptyMessage);
-                    return;
-                }
-
-                const sortedTasks = [...tasks].sort((a, b) => a.order - b.order);
-
-                sortedTasks.forEach(task => {
-                    const taskElement = createTaskElement(task);
-                    elements.taskList.appendChild(taskElement);
-                });
-            };
-
-            const getNewTaskText = () => elements.taskInput.value;
-
-            const clearNewTaskInput = () => {
-                elements.taskInput.value = '';
-                elements.taskInput.focus();
-            };
-
-            const showTaskModal = (taskId, text) => {
-                currentEditingTaskId = taskId;
-                elements.taskTextarea.value = text;
-                elements.taskModal.classList.add('active');
-                elements.taskTextarea.focus();
-            };
-
-            const hideTaskModal = () => {
-                currentEditingTaskId = null;
-                elements.taskModal.classList.remove('active');
-                elements.taskTextarea.value = '';
-                elements.dictateButton.classList.remove('listening');
-            };
-
-            const getTaskModalText = () => elements.taskTextarea.value;
-
-            const getCurrentEditingTaskId = () => currentEditingTaskId;
-
-            return {
-                elements,
-                displayTasks,
-                getNewTaskText,
-                clearNewTaskInput,
-                showTaskModal,
-                hideTaskModal,
-                getTaskModalText,
-                getCurrentEditingTaskId
-            };
-        })();
-
-        // Adaptateur pour la reconnaissance vocale
-        const speechRecognitionAdapter = (() => {
-            // Vérifier si la reconnaissance vocale est supportée
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-            if (!SpeechRecognition) {
-                return {
-                    isSupported: false,
-                    start: () => console.warn("La reconnaissance vocale n'est pas supportée"),
-                    stop: () => {},
-                    onResult: () => {}
-                };
-            }
-
-            const recognition = new SpeechRecognition();
-            recognition.lang = 'fr-FR';
-            recognition.continuous = true;
-            recognition.interimResults = true;
-
-            let resultCallback = null;
-
-            recognition.onresult = event => {
-                const transcript = Array.from(event.results)
-                    .map(result => result[0].transcript)
-                    .join(' ');
-
-                if (resultCallback && typeof resultCallback === 'function') {
-                    resultCallback(transcript);
-                }
-            };
-
-            return {
-                isSupported: true,
-                start: () => recognition.start(),
-                stop: () => recognition.stop(),
-                onResult: callback => {
-                    resultCallback = callback;
-                }
-            };
-        })();
-
-        // Application: Orchestration des fonctionnalités
-        const todoApplication = ((domain, repository, ui, speech) => {
-            // État de l'application
-            let tasks = [];
-
-            // Initialiser l'application avec les tâches stockées
-            const init = () => {
-                tasks = repository.loadTasks();
-                ui.displayTasks(tasks);
-                return tasks;
-            };
-
-            // Ajouter une nouvelle tâche
-            const addTask = text => {
-                if (!text.trim()) return tasks;
-
-                const maxOrder = tasks.length > 0
-                    ? Math.max(...tasks.map(task => task.order)) + 1
-                    : 0;
-
-                const newTask = domain.createTask(Date.now().toString(), text, false, maxOrder);
-                tasks = [...tasks, newTask];
-                repository.saveTasks(tasks);
-                ui.displayTasks(tasks);
-                return tasks;
-            };
-
-            // Basculer l'état d'une tâche
-            const toggleTaskCompletion = taskId => {
-                tasks = tasks.map(task =>
-                    task.id === taskId ? domain.toggleTaskCompletion(task) : task
-                );
-                repository.saveTasks(tasks);
-                ui.displayTasks(tasks);
-                return tasks;
-            };
-
-            // Supprimer une tâche
-            const deleteTask = taskId => {
-                tasks = tasks.filter(task => task.id !== taskId);
-                repository.saveTasks(tasks);
-                ui.displayTasks(tasks);
-                return tasks;
-            };
-
-            // Éditer une tâche
-            const editTask = (taskId, newText) => {
-                tasks = tasks.map(task =>
-                    task.id === taskId ? domain.updateTaskText(task, newText) : task
-                );
-                repository.saveTasks(tasks);
-                ui.displayTasks(tasks);
-                return tasks;
-            };
-
-            // Réordonner les tâches
-            const reorderTasks = (sourceId, targetId) => {
-                tasks = domain.reorderTasks(tasks, sourceId, targetId);
-                repository.saveTasks(tasks);
-                ui.displayTasks(tasks);
-                return tasks;
-            };
-
-            // Ouvrir la modal d'édition pour une tâche
-            const openEditModal = taskId => {
-                const task = tasks.find(task => task.id === taskId);
-                if (task) {
-                    ui.showTaskModal(taskId, task.text);
-                }
-            };
-
-            // Démarrer la dictée vocale
-            const startDictation = () => {
-                if (!speech.isSupported) {
-                    alert("Votre navigateur ne supporte pas la reconnaissance vocale.");
-                    return;
-                }
-
-                speech.onResult(transcript => {
-                    ui.elements.taskTextarea.value = transcript;
-                });
-
-                speech.start();
-                ui.elements.dictateButton.classList.add('listening');
-                ui.elements.dictateButton.textContent = 'Arrêter la dictée';
-            };
-
-            // Arrêter la dictée vocale
-            const stopDictation = () => {
-                if (!speech.isSupported) return;
-
-                speech.stop();
-                ui.elements.dictateButton.classList.remove('listening');
-                ui.elements.dictateButton.textContent = 'Dicter';
-            };
-
-            return {
-                init,
-                addTask,
-                toggleTaskCompletion,
-                deleteTask,
-                editTask,
-                reorderTasks,
-                openEditModal,
-                startDictation,
-                stopDictation,
-                getTasks: () => [...tasks]
-            };
-        })(domain, localStorageAdapter, domAdapter, speechRecognitionAdapter);
-
-        // Initialisation et gestion des événements
-        document.addEventListener('DOMContentLoaded', () => {
-            // Initialiser l'application
-            todoApplication.init();
-
-            // Fonction pour ajouter une tâche à partir de l'input
-            const handleAddTask = () => {
-                const taskText = domAdapter.getNewTaskText();
-                if (taskText.trim()) {
-                    todoApplication.addTask(taskText);
-                    domAdapter.clearNewTaskInput();
-                }
-            };
-
-            // Événement pour le bouton d'ajout
-            domAdapter.elements.addButton.addEventListener('click', handleAddTask);
-
-            // Événement pour la touche Entrée dans l'input
-            domAdapter.elements.taskInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    handleAddTask();
-                }
-            });
-
-            // Délégation d'événements pour les actions sur les tâches
-            domAdapter.elements.taskList.addEventListener('click', (e) => {
-                const taskItem = e.target.closest('.task-item');
-                if (!taskItem) return;
-
-                const taskId = taskItem.dataset.id;
-
-                // Gestion de la case à cocher
-                if (e.target.classList.contains('task-checkbox')) {
-                    todoApplication.toggleTaskCompletion(taskId);
-                }
-
-                // Gestion du clic sur le texte ou le bouton d'édition
-                if (e.target.classList.contains('task-text') ||
-                    e.target.closest('.edit-button')) {
-                    todoApplication.openEditModal(taskId);
-                }
-
-                // Gestion du bouton de suppression
-                if (e.target.classList.contains('delete-button') ||
-                    e.target.closest('.delete-button')) {
-                    todoApplication.deleteTask(taskId);
-                }
-            });
-
-            // Événement de réorganisation des tâches
-            document.addEventListener('task-reordered', (e) => {
-                const { sourceId, targetId } = e.detail;
-                todoApplication.reorderTasks(sourceId, targetId);
-            });
-
-            // Gestion de la modal d'édition de tâche
-            domAdapter.elements.modalClose.addEventListener('click', () => {
-                domAdapter.hideTaskModal();
-                todoApplication.stopDictation();
-            });
-
-            domAdapter.elements.saveTaskButton.addEventListener('click', () => {
-                const taskId = domAdapter.getCurrentEditingTaskId();
-                const newText = domAdapter.getTaskModalText();
-
-                if (taskId && newText.trim()) {
-                    todoApplication.editTask(taskId, newText);
-                    domAdapter.hideTaskModal();
-                    todoApplication.stopDictation();
-                }
-            });
-
-            // Gestion de la dictée vocale
-            let isDictating = false;
-
-            domAdapter.elements.dictateButton.addEventListener('click', () => {
-                if (!isDictating) {
-                    todoApplication.startDictation();
-                    isDictating = true;
-                } else {
-                    todoApplication.stopDictation();
-                    isDictating = false;
-                }
-            });
-
-            // Fermeture de la modal lorsqu'on clique en dehors
-            domAdapter.elements.taskModal.addEventListener('click', (e) => {
-                if (e.target === domAdapter.elements.taskModal) {
-                    domAdapter.hideTaskModal();
-                    todoApplication.stopDictation();
-                }
-            });
-
-            // Gestion de la touche Echap pour fermer la modal
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape' && domAdapter.elements.taskModal.classList.contains('active')) {
-                    domAdapter.hideTaskModal();
-                    todoApplication.stopDictation();
-                }
-            });
-        });
-    </script>
+<div id="viewport">
+  <div id="world"></div>
+</div>
+
+<div id="controls">
+  <button id="left">◀️</button>
+  <button id="jump">⬆️</button>
+  <button id="right">▶️</button>
+</div>
+
+<script>
+const TILE_SIZE = 16;
+const levelHeight = 8;
+const world = document.getElementById("world");
+
+// Plusieurs segments de niveau
+const levels = [
+  [
+    "................",
+    "................",
+    "................",
+    ".....####.......",
+    "................",
+    "..........^^^...",
+    "................",
+    "################"
+  ],
+  [
+    "................",
+    "..^^............",
+    "................",
+    ".....#####......",
+    "................",
+    "........^^......",
+    "................",
+    "################"
+  ],
+  [
+    "................",
+    "......^^........",
+    "................",
+    "..#####.........",
+    "................",
+    "............^^..",
+    "................",
+    "################"
+  ]
+];
+
+let currentSegment = 0;
+let worldWidth = 0;
+
+// Mario
+const mario = { x: 32, y: 0, vx: 0, vy: 0, grounded: false, width: 16, height: 16 };
+const elMario = document.createElement("div");
+elMario.id = "mario";
+world.appendChild(elMario);
+
+// Ennemi (généré par niveau)
+let enemies = [];
+
+function addEnemy(x, y) {
+  const e = { x, y, vx: -0.5, width: 16, height: 16 };
+  const el = document.createElement("div");
+  el.className = "enemy";
+  world.appendChild(el);
+  e.el = el;
+  enemies.push(e);
+}
+
+// Charger un segment de niveau
+function loadSegment(segment) {
+  for (let y = 0; y < segment.length; y++) {
+    for (let x = 0; x < segment[y].length; x++) {
+      const char = segment[y][x];
+      const px = (worldWidth + x) * TILE_SIZE;
+      const py = y * TILE_SIZE;
+      if (char === "#") {
+        const tile = document.createElement("div");
+        tile.className = "tile ground";
+        tile.style.left = px + "px";
+        tile.style.top = py + "px";
+        world.appendChild(tile);
+      }
+      if (char === "^") {
+        const tile = document.createElement("div");
+        tile.className = "tile platform";
+        tile.style.left = px + "px";
+        tile.style.top = py + "px";
+        world.appendChild(tile);
+      }
+      if (char === "E") {
+        addEnemy(px, py);
+      }
+    }
+  }
+  worldWidth += segment[0].length;
+}
+
+// Charger les 2 premiers segments
+loadSegment(levels[0]);
+loadSegment(levels[1]);
+
+// Contrôles tactiles
+let left = false, right = false, jump = false;
+document.getElementById("left").addEventListener("touchstart", () => left = true);
+document.getElementById("left").addEventListener("touchend", () => left = false);
+document.getElementById("right").addEventListener("touchstart", () => right = true);
+document.getElementById("right").addEventListener("touchend", () => right = false);
+document.getElementById("jump").addEventListener("touchstart", () => jump = true);
+document.getElementById("jump").addEventListener("touchend", () => jump = false);
+
+// Collision helpers
+function isSolid(x, y) {
+  const col = Math.floor(x / TILE_SIZE);
+  const row = Math.floor(y / TILE_SIZE);
+  for (let i = 0; i < levels.length; i++) {
+    const level = levels[i];
+    if (row < 0 || row >= level.length || col < 0) continue;
+    if (col < level[0].length * (i + 1)) {
+      const c = level[row][col % level[0].length];
+      if (c === "#") return true;
+      if (c === "^" && mario.vy >= 0) return true;
+    }
+  }
+  return false;
+}
+
+// Réinitialiser Mario
+function resetMario() {
+  mario.x = 32;
+  mario.y = 0;
+  mario.vx = 0;
+  mario.vy = 0;
+}
+
+// Boucle de jeu
+function update() {
+  const speed = 1.5;
+  const jumpPower = -5;
+  const gravity = 0.4;
+
+  mario.vx = 0;
+  if (left) mario.vx = -speed;
+  if (right) mario.vx = speed;
+  if (jump && mario.grounded) {
+    mario.vy = jumpPower;
+    mario.grounded = false;
+  }
+
+  mario.vy += gravity;
+  mario.x += mario.vx;
+  mario.y += mario.vy;
+
+  // Collision sol
+  if (isSolid(mario.x, mario.y + mario.height)) {
+    mario.y = Math.floor((mario.y + mario.height) / TILE_SIZE) * TILE_SIZE - mario.height;
+    mario.vy = 0;
+    mario.grounded = true;
+  }
+
+  // Collision ennemis
+  for (const e of enemies) {
+    const dx = Math.abs(e.x - mario.x);
+    const dy = Math.abs(e.y - mario.y);
+    if (dx < 14 && dy < 14) {
+      resetMario();
+    }
+  }
+
+  // Ennemis
+  for (const e of enemies) {
+    e.x += e.vx;
+    if (isSolid(e.x, e.y + e.height) === false) e.vx *= -1;
+    if (e.x < 0 || e.x > worldWidth * TILE_SIZE) e.vx *= -1;
+    e.el.style.left = e.x + "px";
+    e.el.style.top = e.y + "px";
+  }
+
+  // Scroll caméra
+  const camX = Math.max(0, mario.x - 128);
+  world.style.left = -camX + "px";
+
+  // Mario visuel
+  elMario.style.left = mario.x + "px";
+  elMario.style.top = mario.y + "px";
+
+  // Chargement dynamique de segments
+  if (mario.x > (currentSegment + 1) * 16 * levels[0][0].length - 128) {
+    currentSegment++;
+    const next = levels[currentSegment % levels.length];
+    loadSegment(next);
+  }
+
+  requestAnimationFrame(update);
+}
+
+update();
+</script>
 </body>
 </html>
