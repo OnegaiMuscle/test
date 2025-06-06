@@ -1,254 +1,54 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <title>Mario Scroll Infini</title>
-  <style>
-    body {
-      margin: 0;
-      background: #222;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      font-family: sans-serif;
-    }
-    #viewport {
-      width: 256px;
-      height: 144px;
-      overflow: hidden;
-      position: relative;
-      background: skyblue;
-      border: 2px solid #000;
-    }
-    #world {
-      position: absolute;
-      height: 100%;
-    }
-    .tile, #mario, .enemy {
-      position: absolute;
-      width: 16px;
-      height: 16px;
-    }
-    .ground { background: brown; }
-    .platform { background: #c44; }
-    #mario { background: red; z-index: 10; }
-    .enemy { background: green; z-index: 9; }
-    #controls {
-      margin-top: 10px;
-      display: flex;
-      gap: 10px;
-    }
-    button {
-      padding: 20px;
-      font-size: 18px;
-      border-radius: 8px;
-      border: none;
-      background: #444;
-      color: white;
-    }
-    button:active { background: #666; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sokoban - Architecture Hexagonale</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <div class="game-container">
+        <header class="game-header">
+            <h1>Sokoban</h1>
+            <div class="game-info">
+                <span class="level">Niveau: <span id="level-display">1</span></span>
+                <span class="moves">Mouvements: <span id="moves-display">0</span></span>
+                <span class="targets">Cibles: <span id="targets-status">0/0</span></span>
+                <button id="reset-btn" class="btn">Reset</button>
+                <button id="prev-level" class="btn">Précédent</button>
+                <button id="next-level" class="btn">Suivant</button>
+            </div>
+        </header>
 
-<div id="viewport">
-  <div id="world"></div>
-</div>
+        <main class="game-board-container">
+            <div id="game-board" class="game-board"></div>
+        </main>
 
-<div id="controls">
-  <button id="left">◀️</button>
-  <button id="jump">⬆️</button>
-  <button id="right">▶️</button>
-</div>
+        <div class="controls">
+            <div class="touch-controls">
+                <div class="control-row">
+                    <button class="control-btn" data-direction="up">↑</button>
+                </div>
+                <div class="control-row">
+                    <button class="control-btn" data-direction="left">←</button>
+                    <button class="control-btn" data-direction="down">↓</button>
+                    <button class="control-btn" data-direction="right">→</button>
+                </div>
+            </div>
+        </div>
 
-<script>
-const TILE_SIZE = 16;
-const levelHeight = 8;
-const world = document.getElementById("world");
+        <div id="victory-modal" class="modal hidden">
+            <div class="modal-content">
+                <h2>🎉 Niveau terminé !</h2>
+                <p>Félicitations ! Vous avez résolu le niveau en <span id="final-moves"></span> mouvements.</p>
+                <div class="modal-buttons">
+                    <button id="replay-level" class="btn btn-secondary">🔄 Rejouer</button>
+                    <button id="next-level-modal" class="btn btn-primary">➡️ Niveau suivant</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-// Plusieurs segments de niveau
-const levels = [
-  [
-    "................",
-    "................",
-    "................",
-    ".....####.......",
-    "................",
-    "..........^^^...",
-    "................",
-    "################"
-  ],
-  [
-    "................",
-    "..^^............",
-    "................",
-    ".....#####......",
-    "................",
-    "........^^......",
-    "................",
-    "################"
-  ],
-  [
-    "................",
-    "......^^........",
-    "................",
-    "..#####.........",
-    "................",
-    "............^^..",
-    "................",
-    "################"
-  ]
-];
-
-let currentSegment = 0;
-let worldWidth = 0;
-
-// Mario
-const mario = { x: 32, y: 0, vx: 0, vy: 0, grounded: false, width: 16, height: 16 };
-const elMario = document.createElement("div");
-elMario.id = "mario";
-world.appendChild(elMario);
-
-// Ennemi (généré par niveau)
-let enemies = [];
-
-function addEnemy(x, y) {
-  const e = { x, y, vx: -0.5, width: 16, height: 16 };
-  const el = document.createElement("div");
-  el.className = "enemy";
-  world.appendChild(el);
-  e.el = el;
-  enemies.push(e);
-}
-
-// Charger un segment de niveau
-function loadSegment(segment) {
-  for (let y = 0; y < segment.length; y++) {
-    for (let x = 0; x < segment[y].length; x++) {
-      const char = segment[y][x];
-      const px = (worldWidth + x) * TILE_SIZE;
-      const py = y * TILE_SIZE;
-      if (char === "#") {
-        const tile = document.createElement("div");
-        tile.className = "tile ground";
-        tile.style.left = px + "px";
-        tile.style.top = py + "px";
-        world.appendChild(tile);
-      }
-      if (char === "^") {
-        const tile = document.createElement("div");
-        tile.className = "tile platform";
-        tile.style.left = px + "px";
-        tile.style.top = py + "px";
-        world.appendChild(tile);
-      }
-      if (char === "E") {
-        addEnemy(px, py);
-      }
-    }
-  }
-  worldWidth += segment[0].length;
-}
-
-// Charger les 2 premiers segments
-loadSegment(levels[0]);
-loadSegment(levels[1]);
-
-// Contrôles tactiles
-let left = false, right = false, jump = false;
-document.getElementById("left").addEventListener("touchstart", () => left = true);
-document.getElementById("left").addEventListener("touchend", () => left = false);
-document.getElementById("right").addEventListener("touchstart", () => right = true);
-document.getElementById("right").addEventListener("touchend", () => right = false);
-document.getElementById("jump").addEventListener("touchstart", () => jump = true);
-document.getElementById("jump").addEventListener("touchend", () => jump = false);
-
-// Collision helpers
-function isSolid(x, y) {
-  const col = Math.floor(x / TILE_SIZE);
-  const row = Math.floor(y / TILE_SIZE);
-  for (let i = 0; i < levels.length; i++) {
-    const level = levels[i];
-    if (row < 0 || row >= level.length || col < 0) continue;
-    if (col < level[0].length * (i + 1)) {
-      const c = level[row][col % level[0].length];
-      if (c === "#") return true;
-      if (c === "^" && mario.vy >= 0) return true;
-    }
-  }
-  return false;
-}
-
-// Réinitialiser Mario
-function resetMario() {
-  mario.x = 32;
-  mario.y = 0;
-  mario.vx = 0;
-  mario.vy = 0;
-}
-
-// Boucle de jeu
-function update() {
-  const speed = 1.5;
-  const jumpPower = -5;
-  const gravity = 0.4;
-
-  mario.vx = 0;
-  if (left) mario.vx = -speed;
-  if (right) mario.vx = speed;
-  if (jump && mario.grounded) {
-    mario.vy = jumpPower;
-    mario.grounded = false;
-  }
-
-  mario.vy += gravity;
-  mario.x += mario.vx;
-  mario.y += mario.vy;
-
-  // Collision sol
-  if (isSolid(mario.x, mario.y + mario.height)) {
-    mario.y = Math.floor((mario.y + mario.height) / TILE_SIZE) * TILE_SIZE - mario.height;
-    mario.vy = 0;
-    mario.grounded = true;
-  }
-
-  // Collision ennemis
-  for (const e of enemies) {
-    const dx = Math.abs(e.x - mario.x);
-    const dy = Math.abs(e.y - mario.y);
-    if (dx < 14 && dy < 14) {
-      resetMario();
-    }
-  }
-
-  // Ennemis
-  for (const e of enemies) {
-    e.x += e.vx;
-    if (isSolid(e.x, e.y + e.height) === false) e.vx *= -1;
-    if (e.x < 0 || e.x > worldWidth * TILE_SIZE) e.vx *= -1;
-    e.el.style.left = e.x + "px";
-    e.el.style.top = e.y + "px";
-  }
-
-  // Scroll caméra
-  const camX = Math.max(0, mario.x - 128);
-  world.style.left = -camX + "px";
-
-  // Mario visuel
-  elMario.style.left = mario.x + "px";
-  elMario.style.top = mario.y + "px";
-
-  // Chargement dynamique de segments
-  if (mario.x > (currentSegment + 1) * 16 * levels[0][0].length - 128) {
-    currentSegment++;
-    const next = levels[currentSegment % levels.length];
-    loadSegment(next);
-  }
-
-  requestAnimationFrame(update);
-}
-
-update();
-</script>
+    <script src="game.js"></script>
 </body>
 </html>
