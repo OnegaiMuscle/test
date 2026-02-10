@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Benchmark : CPU vs WebGPU Image Processing</title>
+    <style>
+        body { font-family: sans-serif; background: #1a1a1a; color: white; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .controls { margin-bottom: 20px; background: #333; padding: 15px; border-radius: 8px; }
+        canvas { background: #000; max-width: 45%; border: 1px solid #555; }
+        .results { display: flex; gap: 20px; width: 100%; justify-content: center; }
+        .time { font-weight: bold; color: #00ff00; }
+        button { padding: 10px 20px; cursor: pointer; background: #444; color: white; border: none; border-radius: 5px; }
+        button:hover { background: #666; }
+    </style>
+</head>
+<body>
+
+    <h1>Image Processing : CPU vs WebGPU</h1>
+
+    <div class="controls">
+        <input type="file" id="upload" accept="image/*">
+        <button id="runBench">Lancer le Benchmark</button>
+    </div>
+
+    <div class="results">
+        <div>
+            <h3>CPU (JavaScript)</h3>
+            <p>Temps : <span id="cpuTime" class="time">-</span> ms</p>
+            <canvas id="canvasCPU"></canvas>
+        </div>
+        <div>
+            <h3>GPU (WebGPU)</h3>
+            <p>Temps : <span id="gpuTime" class="time">-</span> ms</p>
+            <canvas id="canvasGPU"></canvas>
+        </div>
+    </div>
+
+<script type="module">
+    const upload = document.getElementById('upload');
+    const runBench = document.getElementById('runBench');
+    const canvasCPU = document.getElementById('canvasCPU');
+    const canvasGPU = document.getElementById('canvasGPU');
+
+    let sourceImg = null;
+
+    upload.addEventListener('change', (e) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => { sourceImg = img; alert("Image chargée !"); };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(e.target.files[0]);
+    });
+
+    runBench.addEventListener('click', async () => {
+        if (!sourceImg) return alert("Chargez une image d'abord");
+
+        const width = sourceImg.width;
+        const height = sourceImg.height;
+        canvasCPU.width = canvasGPU.width = width;
+        canvasCPU.height = canvasGPU.height = height;
+
+        // --- TEST CPU ---
+        const startCPU = performance.now();
+        runCPUResize(sourceImg);
+        const endCPU = performance.now();
+        document.getElementById('cpuTime').innerText = (endCPU - startCPU).toFixed(2);
+
+        // --- TEST WEBGPU ---
+        const startGPU = performance.now();
+        await runWebGPUResize(sourceImg);
+        const endGPU = performance.now();
+        document.getElementById('gpuTime').innerText = (endGPU - startGPU).toFixed(2);
+    });
+
+    function runCPUResize(img) {
+        const ctx = canvasCPU.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, img.width, img.height);
+        const data = imageData.data;
+
+        // Simulation d'un traitement lourd (Flou basique par pixel)
+        // On parcourt chaque pixel manuellement
+        for (let i = 0; i < data.length; i += 4) {
+            data[i]     = data[i] * 0.8;     // R
+            data[i + 1] = data[i + 1] * 0.8; // G
+            data[i + 2] = data[i + 2] * 1.2; // B (On bleunit l'image)
+        }
+        ctx.putImageData(imageData, 0, 0);
+    }
+
+    async function runWebGPUResize(img) {
+        if (!navigator.gpu) return alert("WebGPU non supporté");
+
+        const adapter = await navigator.gpu.requestAdapter();
+        const device = await adapter.requestDevice();
+        const context = canvasGPU.getContext("webgpu");
+        const format = navigator.gpu.getPreferredCanvasFormat();
+        context.configure({ device, format });
+
+        // Créer la texture source
+        const texture = device.createTexture({
+            size: [img.width, img.height],
+            format: 'rgba8unorm',
+            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
+        });
+        device.queue.copyExternalImageToTexture({ source: img }, { texture }, [img.width, img.height]);
+
+        const shaderModule = device.createShaderModule({
+            code: `
+                @group(0) @binding(0) var mySampler: sampler;
+                @group(0) @binding(1) var myTexture: texture_2d<f32>;
+
+                struct VertexOut {
+                    @builtin(position) pos : vec4f,
+                    @location(0) uv : vec2f,
+                }
+
+                @vertex
+                fn vs_main(@builtin(vertex_index) vIdx : u32) -> VertexOut {
+                    var pos = array<vec2f, 4>(
+                        vec2f(-1.0, 1.0), vec2f(1.0, 1.0), vec2f(-1.0, -1.0), vec2f(1.0, -1.0)
+                    );
+                    var uv = array<vec2f, 4>(
+                        vec2f(0.0, 0.0), vec2f(1.0, 0.0), vec2f(0.0, 1.0), vec2f(1.0, 1.0)
+                    );
+                    var out : VertexOut;
+                    out.pos = vec4f(pos[vIdx], 0.0, 1.0);
+                    out.uv = uv[vIdx];
+                    return out;
+                }
+
+                @fragment
+                fn fs_main(@location(0) uv : vec2f) -> @location(0) vec4f {
+                    var color = textureSample(myTexture, mySampler, uv);
+                    // Même traitement que le CPU (B augmente, R/G baissent)
+                    return vec4f(color.r * 0.8, color.g * 0.8, color.b * 1.2, 1.0);
+                }
+            `
+        });
+
+        const pipeline = device.createRenderPipeline({
+            layout: 'auto',
+            vertex: { module: shaderModule, entryPoint: 'vs_main' },
+            fragment: { module: shaderModule, entryPoint: 'fs_main', targets: [{ format }] },
+            primitive: { topology: 'triangle-strip' }
+        });
+
+        const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+
+        const bindGroup = device.createBindGroup({
+            layout: pipeline.getBindGroupLayout(0),
+            entries: [
+                { binding: 0, resource: sampler },
+                { binding: 1, resource: texture.createView() }
+            ]
+        });
+
+        const encoder = device.createCommandEncoder();
+        const pass = encoder.beginRenderPass({
+            colorAttachments: [{
+                view: context.getCurrentTexture().createView(),
+                loadOp: 'clear', clearValue: {r:0, g:0, b:0, a:1}, storeOp: 'store'
+            }]
+        });
+        pass.setPipeline(pipeline);
+        pass.setBindGroup(0, bindGroup);
+        pass.draw(4);
+        pass.end();
+        device.queue.submit([encoder.finish()]);
+    }
+</script>
+</body>
+</html>
