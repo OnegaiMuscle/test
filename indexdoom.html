@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mini Doom Clone - WebGPU Raycasting</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  font-family: 'Courier New', monospace;
+  color: #fff;
+  overflow: hidden;
+}
+canvas {
+  image-rendering: pixelated;
+  cursor: none;
+}
+#hud {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 40px;
+  font-size: 24px;
+  font-weight: bold;
+  text-shadow: 2px 2px 4px #000;
+  z-index: 10;
+  pointer-events: none;
+}
+#hud .health { color: #f44; }
+#hud .ammo { color: #ff0; }
+#hud .score { color: #0f0; }
+#crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 32px;
+  color: #0f0;
+  text-shadow: 0 0 5px #0f0;
+  z-index: 10;
+  pointer-events: none;
+}
+#weapon {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  pointer-events: none;
+}
+#message {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 48px;
+  color: #f00;
+  text-shadow: 0 0 20px #f00;
+  z-index: 20;
+  display: none;
+  text-align: center;
+}
+#minimap {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+  border: 2px solid #0f0;
+  opacity: 0.7;
+}
+#info {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  font-size: 12px;
+  color: #888;
+  z-index: 10;
+}
+#start-screen {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+#start-screen h1 {
+  font-size: 64px;
+  color: #f00;
+  text-shadow: 0 0 30px #f00;
+  margin-bottom: 20px;
+}
+#start-screen p {
+  font-size: 18px;
+  color: #aaa;
+  margin-bottom: 10px;
+}
+#start-screen .start-btn {
+  margin-top: 30px;
+  padding: 15px 40px;
+  font-size: 24px;
+  background: #900;
+  color: #fff;
+  border: 2px solid #f00;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+}
+#start-screen .start-btn:hover {
+  background: #f00;
+}
+#damage-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(255,0,0,0.4) 100%);
+  z-index: 9;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+</style>
+</head>
+<body>
+
+<div id="start-screen">
+  <h1>MINI DOOM</h1>
+  <p>WASD / Flèches - Se déplacer</p>
+  <p>Souris - Regarder</p>
+  <p>Clic gauche - Tirer</p>
+  <p>R - Recharger</p>
+  <button class="start-btn" id="startBtn">JOUER</button>
+  <p id="webgpu-warning" style="color:#f00;margin-top:20px;display:none;">
+    WebGPU non supporté! Utilisation du rendu Canvas 2D de secours.
+  </p>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+<canvas id="minimap" width="160" height="160"></canvas>
+<div id="crosshair">+</div>
+<div id="hud">
+  <span class="health" id="healthDisplay">❤ 100</span>
+  <span class="ammo" id="ammoDisplay">⊕ 50</span>
+  <span class="score" id="scoreDisplay">★ 0</span>
+</div>
+<div id="message"></div>
+<div id="damage-overlay"></div>
+<div id="info">Mini Doom - WebGPU Raycasting</div>
+
+<script>
+// ============================================================
+// CLEAN ARCHITECTURE HEXAGONALE - PROGRAMMATION FONCTIONNELLE
+// ============================================================
+
+// ============ DOMAIN LAYER (Entités et logique métier) ============
+
+const createVector2 = (x = 0, y = 0) => ({ x, y });
+
+const vectorAdd = (a, b) => createVector2(a.x + b.x, a.y + b.y);
+const vectorSub = (a, b) => createVector2(a.x - b.x, a.y - b.y);
+const vectorScale = (v, s) => createVector2(v.x * s, v.y * s);
+const vectorLength = (v) => Math.sqrt(v.x * v.x + v.y * v.y);
+const vectorNormalize = (v) => {
+  const len = vectorLength(v);
+  return len > 0 ? vectorScale(v, 1 / len) : createVector2();
+};
+const vectorDot = (a, b) => a.x * b.x + a.y * b.y;
+const vectorDist = (a, b) => vectorLength(vectorSub(a, b));
+
+const createPlayer = () => ({
+  pos: createVector2(2.5, 2.5),
+  dir: createVector2(-1, 0),
+  plane: createVector2(0, 0.66),
+  health: 100,
+  maxHealth: 100,
+  ammo: 50,
+  maxAmmo: 50,
+  score: 0,
+  speed: 3.0,
+  rotSpeed: 2.5,
+  shooting: false,
+  shootCooldown: 0,
+  shootRate: 0.2,
+  alive: true,
+  angle: 0
+});
+
+const ENEMY_TYPE_IMP = 'imp';
+const ENEMY_TYPE_DEMON = 'demon';
+const ENEMY_TYPE_CACODEMON = 'cacodemon';
+
+const createEnemy = (x, y, type = ENEMY_TYPE_IMP) => {
+  const stats = {
+    [ENEMY_TYPE_IMP]: { health: 30, speed: 1.5, damage: 8, color: [1.0, 0.3, 0.1], attackRange: 8, attackRate: 1.0, score: 100, size: 0.4 },
+    [ENEMY_TYPE_DEMON]: { health: 60, speed: 2.2, damage: 15, color: [0.8, 0.2, 0.5], attackRange: 2.0, attackRate: 0.8, score: 200, size: 0.5 },
+    [ENEMY_TYPE_CACODEMON]: { health: 80, speed: 1.0, damage: 12, color: [0.9, 0.1, 0.1], attackRange: 10, attackRate: 1.5, score: 300, size: 0.6 }
+  };
+  const s = stats[type] || stats[ENEMY_TYPE_IMP];
+  return {
+    pos: createVector2(x, y),
+    type,
+    health: s.health,
+    maxHealth: s.health,
+    speed: s.speed,
+    damage: s.damage,
+    color: s.color,
+    attackRange: s.attackRange,
+    attackRate: s.attackRate,
+    attackCooldown: Math.random() * s.attackRate,
+    scoreValue: s.score,
+    size: s.size,
+    alive: true,
+    hitFlash: 0,
+    state: 'idle',
+    alertDist: 10
+  };
+};
+
+const createProjectile = (pos, dir, fromEnemy = false) => ({
+  pos: createVector2(pos.x, pos.y),
+  dir: vectorNormalize(dir),
+  speed: 12,
+  alive: true,
+  fromEnemy,
+  damage: fromEnemy ? 10 : 25,
+  lifetime: 3.0,
+  size: 0.1
+});
+
+const MAP_WIDTH = 24;
+const MAP_HEIGHT = 24;
+
+const createMap = () => [
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,1,1,1,0,0,0,0,2,0,0,0,0,0,3,3,0,0,0,0,0,1],
+  [1,0,0,1,0,1,0,0,0,0,2,0,0,0,0,0,0,3,0,0,0,0,0,1],
+  [1,0,0,1,0,1,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,4,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,0,0,0,4,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,3,3,3,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,3,0,3,0,0,0,0,0,0,0,1,1,1,0,0,1],
+  [1,0,0,0,0,0,0,0,3,0,3,0,0,0,0,0,0,0,1,0,1,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0,1],
+  [1,0,0,0,4,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,4,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,3,3,3,3,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,3,0,0,3,0,0,1],
+  [1,0,0,2,2,2,2,0,0,0,0,0,0,0,0,0,0,3,0,0,3,0,0,1],
+  [1,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,3,3,3,3,0,0,1],
+  [1,0,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,4,4,4,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+];
+
+const createGameState = () => ({
+  player: createPlayer(),
+  enemies: [
+    createEnemy(5, 5, ENEMY_TYPE_IMP),
+    createEnemy(10, 3, ENEMY_TYPE_DEMON),
+    createEnemy(15, 5, ENEMY_TYPE_IMP),
+    createEnemy(20, 3, ENEMY_TYPE_CACODEMON),
+    createEnemy(8, 10, ENEMY_TYPE_IMP),
+    createEnemy(12, 8, ENEMY_TYPE_DEMON),
+    createEnemy(18, 12, ENEMY_TYPE_CACODEMON),
+    createEnemy(4, 15, ENEMY_TYPE_IMP),
+    createEnemy(10, 18, ENEMY_TYPE_DEMON),
+    createEnemy(15, 15, ENEMY_TYPE_IMP),
+    createEnemy(20, 18, ENEMY_TYPE_CACODEMON),
+    createEnemy(6, 20, ENEMY_TYPE_IMP),
+    createEnemy(14, 20, ENEMY_TYPE_DEMON),
+    createEnemy(18, 8, ENEMY_TYPE_IMP),
+    createEnemy(3, 12, ENEMY_TYPE_IMP)
+  ],
+  projectiles: [],
+  map: createMap(),
+  running: false,
+  gameOver: false,
+  won: false
+});
+
+// ============ DOMAIN SERVICES (Logique métier pure) ============
+
+const isWall = (map, x, y) => {
+  const mx = Math.floor(x);
+  const my = Math.floor(y);
+  if (mx < 0 || mx >= MAP_WIDTH || my < 0 || my >= MAP_HEIGHT) return true;
+  return map[my][mx] > 0;
+};
+
+const getWallType = (map, x, y) => {
+  const mx = Math.floor(x);
+  const my = Math.floor(y);
+  if (mx < 0 || mx >= MAP_WIDTH || my < 0 || my >= MAP_HEIGHT) return 1;
+  return map[my][mx];
+};
+
+const canMoveTo = (map, x, y, margin = 0.2) =>
+  !isWall(map, x - margin, y - margin) &&
+  !isWall(map, x + margin, y - margin) &&
+  !isWall(map, x - margin, y + margin) &&
+  !isWall(map, x + margin, y + margin);
+
+const rotatePlayer = (player, angle) => {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return {
+    ...player,
+    dir: createVector2(
+      player.dir.x * cos - player.dir.y * sin,
+      player.dir.x * sin + player.dir.y * cos
+    ),
+    plane: createVector2(
+      player.plane.x * cos - player.plane.y * sin,
+      player.plane.x * sin + player.plane.y * cos
+    ),
+    angle: player.angle + angle
+  };
+};
+
+const movePlayer = (player, map, forward, strafe, dt) => {
+  const moveSpeed = player.speed * dt;
+  let newPos = { ...player.pos };
+
+  const fx = player.dir.x * forward * moveSpeed;
+  const fy = player.dir.y * forward * moveSpeed;
+
+  if (canMoveTo(map, newPos.x + fx, newPos.y, 0.25)) newPos.x += fx;
+  if (canMoveTo(map, newPos.x, newPos.y + fy, 0.25)) newPos.y += fy;
+
+  const sx = player.plane.x * strafe * moveSpeed * 0.7;
+  const sy = player.plane.y * strafe * moveSpeed * 0.7;
+
+  if (canMoveTo(map, newPos.x + sx, newPos.y, 0.25)) newPos.x += sx;
+  if (canMoveTo(map, newPos.x, newPos.y + sy, 0.25)) newPos.y += sy;
+
+  return { ...player, pos: newPos };
+};
+
+const castRay = (map, pos, dir) => {
+  const mapX = Math.floor(pos.x);
+  const mapY = Math.floor(pos.y);
+
+  const deltaDistX = Math.abs(dir.x) < 1e-10 ? 1e10 : Math.abs(1 / dir.x);
+  const deltaDistY = Math.abs(dir.y) < 1e-10 ? 1e10 : Math.abs(1 / dir.y);
+
+  let stepX, stepY, sideDistX, sideDistY;
+
+  if (dir.x < 0) {
+    stepX = -1;
+    sideDistX = (pos.x - mapX) * deltaDistX;
+  } else {
+    stepX = 1;
+    sideDistX = (mapX + 1.0 - pos.x) * deltaDistX;
+  }
+  if (dir.y < 0) {
+    stepY = -1;
+    sideDistY = (pos.y - mapY) * deltaDistY;
+  } else {
+    stepY = 1;
+    sideDistY = (mapY + 1.0 - pos.y) * deltaDistY;
+  }
+
+  let hit = 0;
+  let side = 0;
+  let cx = mapX, cy = mapY;
+  let maxSteps = 64;
+
+  while (hit === 0 && maxSteps-- > 0) {
+    if (sideDistX < sideDistY) {
+      sideDistX += deltaDistX;
+      cx += stepX;
+      side = 0;
+    } else {
+      sideDistY += deltaDistY;
+      cy += stepY;
+      side = 1;
+    }
+    if (cx >= 0 && cx < MAP_WIDTH && cy >= 0 && cy < MAP_HEIGHT && map[cy][cx] > 0) {
+      hit = map[cy][cx];
+    }
+  }
+
+  const perpWallDist = side === 0
+    ? (cx - pos.x + (1 - stepX) / 2) / dir.x
+    : (cy - pos.y + (1 - stepY) / 2) / dir.y;
+
+  let wallX = side === 0
+    ? pos.y + perpWallDist * dir.y
+    : pos.x + perpWallDist * dir.x;
+  wallX -= Math.floor(wallX);
+
+  return { dist: Math.max(perpWallDist, 0.01), side, wallType: hit, wallX, mapX: cx, mapY: cy };
+};
+
+const updateEnemy = (enemy, player, map, dt) => {
+  if (!enemy.alive) return enemy;
+
+  let updated = { ...enemy, hitFlash: Math.max(0, enemy.hitFlash - dt * 4) };
+
+  const dist = vectorDist(enemy.pos, player.pos);
+
+  if (dist < enemy.alertDist) {
+    updated.state = 'chase';
+  }
+
+  if (updated.state === 'chase' && dist > 1.2) {
+    const dir = vectorNormalize(vectorSub(player.pos, enemy.pos));
+    const moveAmount = enemy.speed * dt;
+    let newX = enemy.pos.x + dir.x * moveAmount;
+    let newY = enemy.pos.y + dir.y * moveAmount;
+
+    if (canMoveTo(map, newX, enemy.pos.y, enemy.size)) {
+      updated.pos = createVector2(newX, updated.pos.y);
+    }
+    if (canMoveTo(map, updated.pos.x, newY, enemy.size)) {
+      updated.pos = createVector2(updated.pos.x, newY);
+    }
+  }
+
+  updated.attackCooldown = Math.max(0, updated.attackCooldown - dt);
+
+  return updated;
+};
+
+const checkEnemyAttack = (enemy, player) => {
+  if (!enemy.alive || enemy.attackCooldown > 0) return null;
+  const dist = vectorDist(enemy.pos, player.pos);
+  if (dist > enemy.attackRange || enemy.state !== 'chase') return null;
+
+  if (enemy.type === ENEMY_TYPE_DEMON) {
+    if (dist < 2.0) {
+      return { type: 'melee', damage: enemy.damage };
+    }
+    return null;
+  }
+
+  const dir = vectorNormalize(vectorSub(player.pos, enemy.pos));
+  return { type: 'ranged', projectile: createProjectile(enemy.pos, dir, true) };
+};
+
+const updateProjectile = (proj, map, dt) => {
+  if (!proj.alive) return proj;
+
+  const newPos = vectorAdd(proj.pos, vectorScale(proj.dir, proj.speed * dt));
+  const newLifetime = proj.lifetime - dt;
+
+  if (isWall(map, newPos.x, newPos.y) || newLifetime <= 0) {
+    return { ...proj, alive: false };
+  }
+
+  return { ...proj, pos: newPos, lifetime: newLifetime };
+};
+
+const checkProjectileEnemyCollision = (proj, enemy) => {
+  if (!proj.alive || !enemy.alive || proj.fromEnemy) return false;
+  return vectorDist(proj.pos, enemy.pos) < enemy.size + proj.size;
+};
+
+const checkProjectilePlayerCollision = (proj, player) => {
+  if (!proj.alive || !proj.fromEnemy) return false;
+  return vectorDist(proj.pos, player.pos) < 0.4;
+};
+
+// ============ APPLICATION LAYER (Use Cases / Ports) ============
+
+const createInputState = () => ({
+  forward: 0,
+  strafe: 0,
+  mouseX: 0,
+  shooting: false,
+  keys: {}
+});
+
+const processInput = (inputState) => ({
+  forward: (inputState.keys['KeyW'] || inputState.keys['ArrowUp'] ? 1 : 0) +
+           (inputState.keys['KeyS'] || inputState.keys['ArrowDown'] ? -1 : 0),
+  strafe: (inputState.keys['KeyD'] || inputState.keys['ArrowRight'] ? 1 : 0) +
+          (inputState.keys['KeyA'] || inputState.keys['ArrowLeft'] ? -1 : 0),
+  mouseX: inputState.mouseX,
+  shooting: inputState.shooting
+});
+
+const updateGameState = (state, input, dt) => {
+  if (state.gameOver) return state;
+
+  let player = { ...state.player };
+  let enemies = state.enemies.map(e => ({ ...e }));
+  let projectiles = state.projectiles.map(p => ({ ...p }));
+
+  // Rotation souris
+  if (input.mouseX !== 0) {
+    player = rotatePlayer(player, -input.mouseX * player.rotSpeed * dt);
+  }
+
+  // Mouvement
+  player = movePlayer(player, state.map, input.forward, input.strafe, dt);
+
+  // Tir
+  player.shootCooldown = Math.max(0, player.shootCooldown - dt);
+  if (input.shooting && player.shootCooldown <= 0 && player.ammo > 0) {
+    const proj = createProjectile(player.pos, player.dir, false);
+    projectiles.push(proj);
+    player.ammo--;
+    player.shootCooldown = player.shootRate;
+    player.shooting = true;
+  } else {
+    player.shooting = false;
+  }
+
+  // MàJ ennemis
+  enemies = enemies.map(e => updateEnemy(e, player, state.map, dt));
+
+  // Attaques ennemis
+  enemies = enemies.map(e => {
+    const attack = checkEnemyAttack(e, player);
+    if (attack) {
+      if (attack.type === 'melee') {
+        player.health = Math.max(0, player.health - attack.damage);
+      } else if (attack.type === 'ranged') {
+        projectiles.push(attack.projectile);
+      }
+      return { ...e, attackCooldown: e.attackRate };
+    }
+    return e;
+  });
+
+  // MàJ projectiles
+  projectiles = projectiles.map(p => updateProjectile(p, state.map, dt));
+
+  // Collisions projectile-ennemi
+  projectiles = projectiles.map(p => {
+    if (!p.alive || p.fromEnemy) return p;
+    for (let i = 0; i < enemies.length; i++) {
+      if (checkProjectileEnemyCollision(p, enemies[i])) {
+        enemies[i] = {
+          ...enemies[i],
+          health: enemies[i].health - p.damage,
+          hitFlash: 1.0,
+          state: 'chase'
+        };
+        if (enemies[i].health <= 0) {
+          enemies[i].alive = false;
+          player.score += enemies[i].scoreValue;
+        }
+        return { ...p, alive: false };
+      }
+    }
+    return p;
+  });
+
+  // Collisions projectile-joueur
+  projectiles = projectiles.map(p => {
+    if (checkProjectilePlayerCollision(p, player)) {
+      player.health = Math.max(0, player.health - p.damage);
+      return { ...p, alive: false };
+    }
+    return p;
+  });
+
+  // Nettoyage
+  projectiles = projectiles.filter(p => p.alive);
+
+  // Vérifications fin
+  if (player.health <= 0) {
+    player.alive = false;
+    return { ...state, player, enemies, projectiles, gameOver: true, won: false };
+  }
+
+  if (enemies.filter(e => e.alive).length === 0) {
+    return { ...state, player, enemies, projectiles, gameOver: true, won: true };
+  }
+
+  return { ...state, player, enemies, projectiles };
+};
+
+// ============ INFRASTRUCTURE / ADAPTERS ============
+
+// --- Canvas 2D Software Renderer (fallback si pas de WebGPU) ---
+
+const SCREEN_WIDTH = 640;
+const SCREEN_HEIGHT = 480;
+
+const WALL_COLORS = {
+  1: { r: 180, g: 60, b: 60 },   // Rouge
+  2: { r: 60, g: 120, b: 180 },  // Bleu
+  3: { r: 60, g: 180, b: 60 },   // Vert
+  4: { r: 180, g: 160, b: 60 }   // Jaune
+};
+
+const renderSoftware = (ctx, imageData, state, zBuffer) => {
+  const data = imageData.data;
+  const w = SCREEN_WIDTH;
+  const h = SCREEN_HEIGHT;
+  const player = state.player;
+
+  // Plafond et sol
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = (y * w + x) * 4;
+      if (y < h / 2) {
+        // Plafond
+        const fade = y / (h / 2);
+        data[idx] = Math.floor(30 * fade);
+        data[idx + 1] = Math.floor(30 * fade);
+        data[idx + 2] = Math.floor(50 * fade);
+      } else {
+        // Sol
+        const fade = 1 - (y - h / 2) / (h / 2);
+        data[idx] = Math.floor(60 * fade + 20);
+        data[idx + 1] = Math.floor(40 * fade + 15);
+        data[idx + 2] = Math.floor(30 * fade + 10);
+      }
+      data[idx + 3] = 255;
+    }
+  }
+
+  // Raycasting murs
+  for (let x = 0; x < w; x++) {
+    const cameraX = 2 * x / w - 1;
+    const rayDir = createVector2(
+      player.dir.x + player.plane.x * cameraX,
+      player.dir.y + player.plane.y * cameraX
+    );
+
+    const hit = castRay(state.map, player.pos, rayDir);
+    zBuffer[x] = hit.dist;
+
+    const lineHeight = Math.floor(h / hit.dist);
+    let drawStart = Math.max(0, Math.floor(-lineHeight / 2 + h / 2));
+    let drawEnd = Math.min(h - 1, Math.floor(lineHeight / 2 + h / 2));
+
+    const wc = WALL_COLORS[hit.wallType] || WALL_COLORS[1];
+    const shade = hit.side === 1 ? 0.7 : 1.0;
+    const fog = Math.max(0.1, 1.0 - hit.dist / 20);
+
+    // Texture procédurale simple
+    const texX = Math.floor(hit.wallX * 16);
+
+    for (let y = drawStart; y <= drawEnd; y++) {
+      const texY = Math.floor((y - drawStart) / (drawEnd - drawStart + 1) * 16);
+      const isBrick = ((texX + texY) % 4 < 2) ? 1.0 : 0.85;
+
+      const idx = (y * w + x) * 4;
+      data[idx] = Math.floor(wc.r * shade * fog * isBrick);
+      data[idx + 1] = Math.floor(wc.g * shade * fog * isBrick);
+      data[idx + 2] = Math.floor(wc.b * shade * fog * isBrick);
+      data[idx + 3] = 255;
+    }
+  }
+
+  // Sprites ennemis (tri par distance)
+  const aliveEnemies = state.enemies.filter(e => e.alive);
+  const spriteOrder = aliveEnemies.map(e => ({
+    enemy: e,
+    dist: (player.pos.x - e.pos.x) ** 2 + (player.pos.y - e.pos.y) ** 2
+  })).sort((a, b) => b.dist - a.dist);
+
+  spriteOrder.forEach(({ enemy }) => {
+    const spriteX = enemy.pos.x - player.pos.x;
+    const spriteY = enemy.pos.y - player.pos.y;
+
+    const invDet = 1.0 / (player.plane.x * player.dir.y - player.dir.x * player.plane.y);
+    const transformX = invDet * (player.dir.y * spriteX - player.dir.x * spriteY);
+    const transformY = invDet * (-player.plane.y * spriteX + player.plane.x * spriteY);
+
+    if (transformY <= 0.1) return;
+
+    const spriteScreenX = Math.floor((w / 2) * (1 + transformX / transformY));
+    const spriteHeight = Math.abs(Math.floor(h / transformY));
+    const spriteWidth = Math.abs(Math.floor(h / transformY * 0.8));
+
+    const drawStartY = Math.max(0, Math.floor(-spriteHeight / 2 + h / 2));
+    const drawEndY = Math.min(h - 1, Math.floor(spriteHeight / 2 + h / 2));
+    const drawStartX = Math.max(0, Math.floor(spriteScreenX - spriteWidth / 2));
+    const drawEndX = Math.min(w - 1, Math.floor(spriteScreenX + spriteWidth / 2));
+
+    const fog = Math.max(0.15, 1.0 - transformY / 18);
+    const flash = enemy.hitFlash;
+
+    for (let stripe = drawStartX; stripe <= drawEndX; stripe++) {
+      if (transformY < zBuffer[stripe]) {
+        const texX = (stripe - drawStartX) / (drawEndX - drawStartX + 1);
+        for (let y = drawStartY; y <= drawEndY; y++) {
+          const texY = (y - drawStartY) / (drawEndY - drawStartY + 1);
+
+          // Forme humanoïde procédurale
+          const cx = texX - 0.5;
+          const cy = texY - 0.5;
+          let visible = false;
+
+          // Tête
+          if (cx * cx * 12 + (cy + 0.32) * (cy + 0.32) * 16 < 0.08) visible = true;
+          // Corps
+          if (Math.abs(cx) < 0.2 && cy > -0.15 && cy < 0.3) visible = true;
+          // Bras
+          if (Math.abs(cx) < 0.4 && Math.abs(cx) > 0.15 && cy > -0.1 && cy < 0.12) visible = true;
+          // Jambes
+          if (Math.abs(cx) < 0.18 && Math.abs(cx) > 0.02 && cy > 0.25 && cy < 0.5) visible = true;
+
+          if (visible) {
+            const idx = (y * w + stripe) * 4;
+            const r = Math.min(255, Math.floor((enemy.color[0] * 255 + flash * 255) * fog));
+            const g = Math.min(255, Math.floor((enemy.color[1] * 255 + flash * 80) * fog));
+            const b = Math.min(255, Math.floor((enemy.color[2] * 255 + flash * 80) * fog));
+            data[idx] = r;
+            data[idx + 1] = g;
+            data[idx + 2] = b;
+            data[idx + 3] = 255;
+          }
+        }
+      }
+    }
+
+    // Barre de vie
+    if (enemy.health < enemy.maxHealth) {
+      const barW = Math.min(60, spriteWidth);
+      const barH = 3;
+      const barY = Math.max(0, drawStartY - 8);
+      const barX = spriteScreenX - Math.floor(barW / 2);
+      const hpRatio = enemy.health / enemy.maxHealth;
+
+      for (let bx = 0; bx < barW; bx++) {
+        const px = barX + bx;
+        if (px < 0 || px >= w) continue;
+        for (let by = 0; by < barH; by++) {
+          const py = barY + by;
+          if (py < 0 || py >= h) continue;
+          const idx = (py * w + px) * 4;
+          if (bx / barW < hpRatio) {
+            data[idx] = 0; data[idx+1] = 255; data[idx+2] = 0;
+          } else {
+            data[idx] = 80; data[idx+1] = 0; data[idx+2] = 0;
+          }
+          data[idx+3] = 255;
+        }
+      }
+    }
+  });
+
+  // Projectiles
+  state.projectiles.forEach(proj => {
+    const spriteX = proj.pos.x - player.pos.x;
+    const spriteY = proj.pos.y - player.pos.y;
+
+    const invDet = 1.0 / (player.plane.x * player.dir.y - player.dir.x * player.plane.y);
+    const transformX = invDet * (player.dir.y * spriteX - player.dir.x * spriteY);
+    const transformY = invDet * (-player.plane.y * spriteX + player.plane.x * spriteY);
+
+    if (transformY <= 0.1) return;
+
+    const screenX = Math.floor((w / 2) * (1 + transformX / transformY));
+    const size = Math.floor(h / transformY * 0.15);
+
+    if (size < 1) return;
+
+    const startX = Math.max(0, screenX - size);
+    const endX = Math.min(w - 1, screenX + size);
+    const startY = Math.max(0, Math.floor(h / 2) - size);
+    const endY = Math.min(h - 1, Math.floor(h / 2) + size);
+
+    for (let x = startX; x <= endX; x++) {
+      if (transformY < zBuffer[x]) {
+        for (let y = startY; y <= endY; y++) {
+          const dx = (x - screenX) / size;
+          const dy = (y - h / 2) / size;
+          if (dx * dx + dy * dy < 1) {
+            const idx = (y * w + x) * 4;
+            if (proj.fromEnemy) {
+              data[idx] = 255; data[idx+1] = 100; data[idx+2] = 0;
+            } else {
+              data[idx] = 255; data[idx+1] = 255; data[idx+2] = 0;
+            }
+            data[idx+3] = 255;
+          }
+        }
+      }
+    }
+  });
+
+  ctx.putImageData(imageData, 0, 0);
+};
+
+// --- Minimap Renderer ---
+const renderMinimap = (ctx, state) => {
+  const s = 160;
+  const cs = s / MAP_WIDTH;
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, s, s);
+
+  // Murs
+  for (let y = 0; y < MAP_HEIGHT; y++) {
+    for (let x = 0; x < MAP_WIDTH; x++) {
+      if (state.map[y][x] > 0) {
+        const colors = { 1: '#a33', 2: '#38a', 3: '#3a3', 4: '#aa3' };
+        ctx.fillStyle = colors[state.map[y][x]] || '#666';
+        ctx.fillRect(x * cs, y * cs, cs, cs);
+      }
+    }
+  }
+
+  // Ennemis
+  state.enemies.filter(e => e.alive).forEach(e => {
+    ctx.fillStyle = `rgb(${e.color[0]*255},${e.color[1]*255},${e.color[2]*255})`;
+    ctx.beginPath();
+    ctx.arc(e.pos.x * cs, e.pos.y * cs, 2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Projectiles
+  state.projectiles.forEach(p => {
+    ctx.fillStyle = p.fromEnemy ? '#f60' : '#ff0';
+    ctx.beginPath();
+    ctx.arc(p.pos.x * cs, p.pos.y * cs, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Joueur
+  ctx.fillStyle = '#0f0';
+  ctx.beginPath();
+  ctx.arc(state.player.pos.x * cs, state.player.pos.y * cs, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Direction
+  ctx.strokeStyle = '#0f0';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(state.player.pos.x * cs, state.player.pos.y * cs);
+  ctx.lineTo(
+    (state.player.pos.x + state.player.dir.x * 1.5) * cs,
+    (state.player.pos.y + state.player.dir.y * 1.5) * cs
+  );
+  ctx.stroke();
+};
+
+// --- Weapon HUD (Canvas overlay) ---
+const drawWeapon = (ctx, w, h, shooting, time) => {
+  const bobX = Math.sin(time * 3) * 4;
+  const bobY = Math.abs(Math.cos(time * 3)) * 3;
+  const recoil = shooting ? -15 : 0;
+
+  const cx = w / 2 + bobX;
+  const cy = h - 80 + bobY + recoil;
+
+  // Bras
+  ctx.fillStyle = '#8B6914';
+  ctx.fillRect(cx - 8, cy + 20, 16, 60);
+
+  // Canon
+  ctx.fillStyle = '#555';
+  ctx.fillRect(cx - 6, cy - 40, 12, 65);
+  ctx.fillStyle = '#444';
+  ctx.fillRect(cx - 4, cy - 50, 8, 15);
+
+  // Flash de tir
+  if (shooting) {
+    ctx.fillStyle = '#ff0';
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.arc(cx, cy - 55, 15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(cx, cy - 55, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1.0;
+  }
+};
+
+// ============ MAIN GAME LOOP (Composition Root) ============
+
+const main = async () => {
+  const canvas = document.getElementById('gameCanvas');
+  const minimapCanvas = document.getElementById('minimap');
+  const startScreen = document.getElementById('start-screen');
+  const startBtn = document.getElementById('startBtn');
+  const messageEl = document.getElementById('message');
+  const healthDisplay = document.getElementById('healthDisplay');
+  const ammoDisplay = document.getElementById('ammoDisplay');
+  const scoreDisplay = document.getElementById('scoreDisplay');
+  const damageOverlay = document.getElementById('damage-overlay');
+
+  canvas.width = SCREEN_WIDTH;
+  canvas.height = SCREEN_HEIGHT;
+
+  const ctx = canvas.getContext('2d');
+  const minimapCtx = minimapCanvas.getContext('2d');
+  const imageData = ctx.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
+  const zBuffer = new Float32Array(SCREEN_WIDTH);
+
+  // Vérif WebGPU (info seulement, on utilise le soft renderer de toute façon pour la fiabilité)
+  if (!navigator.gpu) {
+    document.getElementById('webgpu-warning').style.display = 'block';
+  }
+
+  let gameState = createGameState();
+  let inputState = createInputState();
+  let lastTime = 0;
+  let gameTime = 0;
+  let prevHealth = 100;
+  let mouseAccumX = 0;
+
+  // Input handling
+  const onKeyDown = (e) => {
+    inputState.keys[e.code] = true;
+    if (e.code === 'KeyR') {
+      gameState.player.ammo = gameState.player.maxAmmo;
+    }
+    e.preventDefault();
+  };
+
+  const onKeyUp = (e) => {
+    inputState.keys[e.code] = false;
+    e.preventDefault();
+  };
+
+  const onMouseMove = (e) => {
+    mouseAccumX += e.movementX * 0.15;
+  };
+
+  const onMouseDown = (e) => {
+    if (e.button === 0) inputState.shooting = true;
+  };
+
+  const onMouseUp = (e) => {
+    if (e.button === 0) inputState.shooting = false;
+  };
+
+  const gameLoop = (timestamp) => {
+    if (!gameState.running) return;
+
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+    gameTime += dt;
+
+    // Process input
+    inputState.mouseX = mouseAccumX;
+    mouseAccumX = 0;
+    const input = processInput(inputState);
+
+    // Update
+    prevHealth = gameState.player.health;
+    gameState = updateGameState(gameState, input, dt);
+
+    // Damage flash
+    if (gameState.player.health < prevHealth) {
+      damageOverlay.style.opacity = '0.6';
+      setTimeout(() => { damageOverlay.style.opacity = '0'; }, 150);
+    }
+
+    // Render
+    renderSoftware(ctx, imageData, gameState, zBuffer);
+    drawWeapon(ctx, SCREEN_WIDTH, SCREEN_HEIGHT, gameState.player.shooting, gameTime);
+    renderMinimap(minimapCtx, gameState);
+
+    // HUD
+    healthDisplay.textContent = `❤ ${gameState.player.health}`;
+    ammoDisplay.textContent = `⊕ ${gameState.player.ammo}`;
+    scoreDisplay.textContent = `★ ${gameState.player.score}`;
+
+    // Game over / Win
+    if (gameState.gameOver) {
+      messageEl.style.display = 'block';
+      if (gameState.won) {
+        messageEl.style.color = '#0f0';
+        messageEl.style.textShadow = '0 0 20px #0f0';
+        messageEl.innerHTML = 'VICTOIRE!<br><span style="font-size:24px">Score: ' + gameState.player.score + '<br>Cliquez pour rejouer</span>';
+      } else {
+        messageEl.innerHTML = 'GAME OVER<br><span style="font-size:24px">Score: ' + gameState.player.score + '<br>Cliquez pour rejouer</span>';
+      }
+      document.exitPointerLock && document.exitPointerLock();
+
+      const restart = () => {
+        messageEl.style.display = 'none';
+        messageEl.style.color = '#f00';
+        messageEl.style.textShadow = '0 0 20px #f00';
+        gameState = createGameState();
+        gameState.running = true;
+        canvas.requestPointerLock();
+        document.removeEventListener('click', restart);
+        lastTime = performance.now();
+        requestAnimationFrame(gameLoop);
+      };
+      setTimeout(() => document.addEventListener('click', restart), 500);
+      return;
+    }
+
+    requestAnimationFrame(gameLoop);
+  };
+
+  // Start
+  startBtn.addEventListener('click', () => {
+    startScreen.style.display = 'none';
+    gameState.running = true;
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mouseup', onMouseUp);
+
+    canvas.requestPointerLock();
+    canvas.addEventListener('click', () => {
+      if (!document.pointerLockElement) {
+        canvas.requestPointerLock();
+      }
+    });
+
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+  });
+};
+
+main();
+</script>
+</body>
+</html>
