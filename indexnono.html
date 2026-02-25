@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nonogramme — Bitboard</title>
+<style>
+/* ════════ Reset & Variables ════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --CELL: 34px;
+  --bg:      #090914;
+  --surface: #111124;
+  --bd:      #1e1e42;
+  --cell-bg: #0d0d20;
+  --cell-ho: #16163a;
+  --fill:    #e84c6e;
+  --fill2:   #c23558;
+  --mark:    #4a4a90;
+  --cq-c:    #6060a8;
+  --cq-ok:   #2aebb0;
+  --text:    #d0d0f0;
+  --radius:  5px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 22px 12px 48px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ════════ Header ════════ */
+header {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+h1 {
+  font-size: 1.55rem;
+  font-weight: 800;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+}
+h1 em { color: var(--fill); font-style: normal; }
+
+.ctrl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+select, .btn {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--bd);
+  border-radius: var(--radius);
+  padding: 7px 14px;
+  font-size: .82rem;
+  cursor: pointer;
+  outline: none;
+  transition: border-color .18s, color .18s;
+}
+select:hover, .btn:hover { border-color: var(--fill); color: var(--fill); }
+
+#timer {
+  font: 600 .95rem/1 'Courier New', monospace;
+  color: var(--cq-c);
+  letter-spacing: 2px;
+  min-width: 50px;
+  text-align: center;
+}
+
+/* ════════ Board (CSS Grid 2×2) ════════ */
+#board {
+  display: inline-grid;
+  grid-template-areas: "corner cclues" "rclues cgrid";
+  background: var(--bg);
+  border-radius: var(--radius);
+}
+
+/* ════════ Column Clues ════════ */
+.col-clues { grid-area: cclues; display: flex; align-items: flex-end; }
+
+.clue-col {
+  width: var(--CELL);
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+  padding-bottom: 5px;
+  transition: background .2s;
+  border-radius: 4px 4px 0 0;
+}
+.clue-col span { font-size: .68rem; font-weight: 700; color: var(--cq-c); line-height: 1.3; }
+.clue-col.done { background: rgba(42,235,176,.07); }
+.clue-col.done span { color: var(--cq-ok); }
+
+/* ════════ Row Clues ════════ */
+.row-clues { grid-area: rclues; display: flex; flex-direction: column; align-items: flex-end; }
+
+.clue-row {
+  height: var(--CELL);
+  min-width: 56px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding-right: 8px;
+  transition: background .2s;
+  border-radius: 4px 0 0 4px;
+}
+.clue-row span { font-size: .68rem; font-weight: 700; color: var(--cq-c); min-width: 10px; text-align: center; }
+.clue-row.done { background: rgba(42,235,176,.07); }
+.clue-row.done span { color: var(--cq-ok); }
+
+/* ════════ Corner ════════ */
+.corner { grid-area: corner; min-width: 56px; min-height: 64px; }
+
+/* ════════ Cell Grid ════════ */
+.cell-grid {
+  grid-area: cgrid;
+  display: grid;
+  border: 2px solid var(--bd);
+  border-radius: 0 var(--radius) var(--radius) var(--radius);
+  overflow: hidden;
+}
+.cell {
+  width: var(--CELL);
+  height: var(--CELL);
+  background: var(--cell-bg);
+  border: .5px solid var(--bd);
+  cursor: pointer;
+  position: relative;
+  transition: background .05s, filter .1s;
+}
+.cell:hover { background: var(--cell-ho); }
+
+.cell.fill {
+  background: linear-gradient(135deg, var(--fill), var(--fill2));
+}
+.cell.fill:hover { filter: brightness(1.12); }
+
+.cell.mark::after {
+  content: '✕';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--mark);
+  pointer-events: none;
+}
+
+/* Séparateurs de groupes (tous les 5) */
+.cell.sb { border-right:  1.5px solid #2a3a90 !important; }
+.cell.sr { border-bottom: 1.5px solid #2a3a90 !important; }
+
+/* ════════ Légende ════════ */
+.legend {
+  margin-top: 14px;
+  font-size: .72rem;
+  color: var(--cq-c);
+  opacity: .8;
+  text-align: center;
+  letter-spacing: .3px;
+}
+
+/* ════════ Win Overlay ════════ */
+#win {
+  position: fixed; inset: 0;
+  background: rgba(6,6,16,.88);
+  backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 99;
+  opacity: 0; pointer-events: none;
+  transition: opacity .35s;
+}
+#win.on { opacity: 1; pointer-events: all; }
+
+.win-box {
+  background: var(--surface);
+  border: 1px solid var(--bd);
+  border-radius: 20px;
+  padding: 42px 60px;
+  text-align: center;
+  transform: scale(.88) translateY(20px);
+  transition: transform .4s cubic-bezier(.2,.9,.3,1);
+}
+#win.on .win-box { transform: scale(1) translateY(0); }
+.win-box h2 { font-size: 3rem; margin-bottom: 6px; }
+.win-box .info { color: var(--cq-c); font-size: .92rem; margin-bottom: 26px; }
+.win-box .btn-ok {
+  background: var(--fill);
+  color: #fff; border: none;
+  padding: 12px 34px;
+  border-radius: 10px;
+  font-size: 1rem; font-weight: 700;
+  cursor: pointer; letter-spacing: .4px;
+  transition: filter .2s;
+}
+.win-box .btn-ok:hover { filter: brightness(1.12); }
+
+/* ════════ Responsive ════════ */
+@media (max-width: 480px) {
+  :root { --CELL: 27px; }
+  h1 { font-size: 1.15rem; letter-spacing: 2px; }
+  .win-box { padding: 28px 28px; }
+  .win-box h2 { font-size: 2rem; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>NONO<em>GRAMME</em></h1>
+  <div class="ctrl">
+    <select id="psel"></select>
+    <button class="btn" id="breset">↺ Reset</button>
+    <span id="timer">00:00</span>
+  </div>
+</header>
+
+<div id="board"></div>
+<p class="legend">Clic gauche : remplir &nbsp;│&nbsp; Clic droit : marquer ✕ &nbsp;│&nbsp; Glisser : cellules multiples</p>
+
+<div id="win">
+  <div class="win-box">
+    <h2>🎉</h2>
+    <p class="info" id="winfo"></p>
+    <button class="btn-ok" id="bnext">Puzzle suivant →</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ╔══════════════════════════════════════════════════════════════╗
+   ║  DOMAIN — BitBoard                                           ║
+   ║  Grille représentée par un tableau de BigInt (un par ligne). ║
+   ║  Bit i = colonne i. Ops O(1) sur les cellules.               ║
+   ╚══════════════════════════════════════════════════════════════╝ */
+const BB = Object.freeze({
+  create:  n       => new Array(n).fill(0n),
+  set:     (b,r,c) => { const a=[...b]; a[r]|= 1n<<BigInt(c); return a; },
+  unset:   (b,r,c) => { const a=[...b]; a[r]&=~(1n<<BigInt(c)); return a; },
+  toggle:  (b,r,c) => { const a=[...b]; a[r]^= 1n<<BigInt(c); return a; },
+  get:     (b,r,c) => !!(b[r] & (1n<<BigInt(c))),
+  eq:      (a,b)   => a.length===b.length && a.every((v,i)=>v===b[i]),
+
+  /** Extrait la colonne c comme un BigInt (bit r = ligne r) */
+  colBits: (b,c,R) => {
+    let v=0n;
+    for(let r=0;r<R;r++) if(b[r]&(1n<<BigInt(c))) v|=(1n<<BigInt(r));
+    return v;
+  },
+
+  /** Construit un bitboard depuis un tableau de chaînes ('X'=rempli) */
+  fromStr: rows => rows.map(s=>{
+    let v=0n;
+    for(let i=0;i<s.length;i++) if(s[i]==='X') v|=(1n<<BigInt(i));
+    return v;
+  })
+});
+
+/* ╔══════════════════════════════════════════════════════════════╗
+   ║  DOMAIN — Clues (calcul des indices de runs)                 ║
+   ╚══════════════════════════════════════════════════════════════╝ */
+const Clues = Object.freeze({
+  /** Calcule les suites consécutives dans un vecteur de bits */
+  runs: (bits, size) => {
+    const r=[]; let n=0;
+    for(let i=0;i<size;i++){
+      (bits & (1n<<BigInt(i))) ? n++ : (n && (r.push(n), n=0));
+    }
+    n && r.push(n);
+    return r.length ? r : [0];
+  },
+  forRows: (g,R,C) => Array.from({length:R}, (_,r)=>Clues.runs(g[r],C)),
+  forCols: (g,R,C) => Array.from({length:C}, (_,c)=>Clues.runs(BB.colBits(g,c,R),R)),
+  eq:      (a,b)   => a.length===b.length && a.every((v,i)=>v===b[i])
+});
+
+/* ╔══════════════════════════════════════════════════════════════╗
+   ║  DOMAIN — Puzzles                                            ║
+   ╚══════════════════════════════════════════════════════════════╝ */
+const PUZZLES = [
+  { id:0, name:'❤️  Cœur', size:10, grid:[
+    '.XXX.XXX..','XXXXXXXXXX','XXXXXXXXXX','.XXXXXXXX.',
+    '..XXXXXX..','...XXXX...','....XX....', '.....X....',
+    '..........','..........'] },
+
+  { id:1, name:'🏠 Maison', size:10, grid:[
+    '....XX....','...XXXX...','..XXXXXX..','.XXXXXXXX.',
+    'XXXXXXXXXX','XX.XXXX.XX','XX.XXXX.XX','XX..XX..XX',
+    'XX..XX..XX','XXXXXXXXXX'] },
+
+  { id:2, name:'➡️  Flèche', size:10, grid:[
+    '....X.....','...XX.....','..XXX.....','.XXXX.....',
+    'XXXXXXXXXX','XXXXXXXXXX','.XXXX.....','..XXX.....',
+    '...XX.....','....X.....'] },
+
+  { id:3, name:'🌲 Arbre', size:10, grid:[
+    '....XX....','...XXXX...','..XXXXXX..','.XXXXXXXX.',
+    'XXXXXXXXXX','.XXXXXXXX.','..XXXXXX..','....XX....',
+    '....XX....','....XX....'] },
+
+  { id:4, name:'💎 Diamant', size:10, grid:[
+    '....XX....','...XXXX...','..XXXXXX..','.XXXXXXXX.',
+    'XXXXXXXXXX','.XXXXXXXX.','..XXXXXX..','...XXXX...',
+    '....XX....','..........'] },
+
+  { id:5, name:'🐟 Poisson', size:10, grid:[
+    'X.........','XX.XXXXX..','XXXXXXXXX.','XXXXXXXXXX',
+    'XXXXXXXXXX','XXXXXXXXX.','XX.XXXXX..','X.........',
+    '..........','..........'] },
+
+  { id:6, name:'🔔 Cloche', size:10, grid:[
+    '....XX....','..XXXXXX..','..XXXXXX..','..XXXXXX..',
+    '.XXXXXXXX.','.XXXXXXXX.','XXXXXXXXXX','XXXXXXXXXX',
+    '....XX....','..XXXXXX..'] }
+];
+
+/* ╔══════════════════════════════════════════════════════════════╗
+   ║  APPLICATION — Game State (machine à états pure / immuable)  ║
+   ╚══════════════════════════════════════════════════════════════╝ */
+const GS = Object.freeze({
+  init: p => {
+    const sol = BB.fromStr(p.grid);
+    return Object.freeze({
+      p,
+      sz:   p.size,
+      sol,
+      fill: BB.create(p.size),   // cellules remplies
+      mark: BB.create(p.size),   // cellules marquées ✕
+      rq:   Clues.forRows(sol, p.size, p.size),
+      cq:   Clues.forCols(sol, p.size, p.size),
+      done: false,
+      t0:   performance.now(),
+      ms:   0,
+      mv:   0
+    });
+  },
+
+  doFill: (s,r,c) => {
+    if (s.done || BB.get(s.mark,r,c)) return s;
+    const fill = BB.toggle(s.fill,r,c);
+    const done = BB.eq(fill, s.sol);
+    return Object.freeze({
+      ...s, fill, done, mv: s.mv+1,
+      ms: done ? performance.now()-s.t0 : s.ms
+    });
+  },
+
+  doMark: (s,r,c) => {
+    if (s.done || BB.get(s.fill,r,c)) return s;
+    return Object.freeze({ ...s, mark: BB.toggle(s.mark,r,c), mv: s.mv+1 });
+  },
+
+  rowDone: (s,r) => Clues.eq(Clues.runs(s.fill[r], s.sz), s.rq[r]),
+  colDone: (s,c) => Clues.eq(Clues.runs(BB.colBits(s.fill,c,s.sz), s.sz), s.cq[c])
+});
+
+/* ╔══════════════════════════════════════════════════════════════╗
+   ║  ADAPTER — Renderer DOM (port de sortie)                     ║
+   ║  Rendu incrémental : seules les cellules modifiées sont       ║
+   ║  mises à jour ; les indices sont recalculés en O(taille).     ║
+   ╚══════════════════════════════════════════════════════════════╝ */
+const Renderer = (() => {
+  let C=[], RQ=[], CQ=[];          // caches DOM : C[r][c], RQ[r], CQ[c]
+  const $ = id => document.getElementById(id);
+  const mk = (t,c) => { const e=document.createElement(t); if(c) e.className=c; return e; };
+  const fmt = ms => {
+    const s = Math.floor(ms/1e3);
+    return `${(''+Math.floor(s/60)).padStart(2,'0')}:${(''+s%60).padStart(2,'0')}`;
+  };
+
+  /* ── Construction initiale du DOM ── */
+  function build(s, onDown, onOver) {
+    C=[]; RQ=[]; CQ=[];
+    const board = $('board');
+    board.innerHTML = '';
+    const { sz, rq, cq } = s;
+
+    // Corner vide (aligne row-clues / col-clues)
+    board.appendChild(mk('div','corner'));
+
+    // Indices colonnes
+    const cw = mk('div','col-clues');
+    for(let c=0;c<sz;c++){
+      const el = mk('div','clue-col');
+      el.dataset.c = c;
+      cq[c].forEach(n=>{ const sp=mk('span'); sp.textContent=n; el.appendChild(sp); });
+      cw.appendChild(el);
+      CQ.push(el);
+    }
+    board.appendChild(cw);
+
+    // Indices lignes
+    const rw = mk('div','row-clues');
+    for(let r=0;r<sz;r++){
+      const el = mk('div','clue-row');
+      el.dataset.r = r;
+      rq[r].forEach(n=>{ const sp=mk('span'); sp.textContent=n; el.appendChild(sp); });
+      rw.appendChild(el);
+      RQ.push(el);
+    }
+    board.appendChild(rw);
+
+    // Grille de cellules
+    const grid = mk('div','cell-grid');
+    grid.style.gridTemplateColumns = `repeat(${sz},var(--CELL))`;
+    grid.style.gridTemplateRows    = `repeat(${sz},var(--CELL))`;
+
+    for(let r=0;r<sz;r++){
+      C[r]=[];
+      for(let c=0;c<sz;c++){
+        const cell = mk('div','cell');
+        cell.dataset.r = r;
+        cell.dataset.c = c;
+        // Séparateurs de groupes de 5
+        if((c+1)%5===0 && c<sz-1) cell.classList.add('sb');
+        if((r+1)%5===0 && r<sz-1) cell.classList.add('sr');
+        grid.appendChild(cell);
+        C[r].push(cell);
+      }
+    }
+    board.appendChild(grid);
+
+    // ── Événements souris ──
+    const hit = e => e.target.closest('.cell');
+    grid.addEventListener('mousedown', e => {
+      e.preventDefault();
+      const el=hit(e); if(!el) return;
+      onDown(+el.dataset.r, +el.dataset.c, e.button);
+    });
+    grid.addEventListener('mouseover', e => {
+      const el=hit(e); if(!el) return;
+      onOver(+el.dataset.r, +el.dataset.c);
+    });
+    grid.addEventListener('contextmenu', e => e.preventDefault());
+
+    // ── Événements tactiles ──
+    const tHit = t => document.elementFromPoint(t.clientX,t.clientY)?.closest('.cell');
+    grid.addEventListener('touchstart', e => {
+      e.preventDefault();
+      const el=tHit(e.touches[0]); if(!el) return;
+      onDown(+el.dataset.r, +el.dataset.c, 0);
+    }, {passive:false});
+    grid.addEventListener('touchmove', e => {
+      e.preventDefault();
+      const el=tHit(e.touches[0]); if(!el) return;
+      onOver(+el.dataset.r, +el.dataset.c);
+    }, {passive:false});
+
+    // État initial des indices (lignes/cols vides = done immédiatement)
+    refreshClues(s);
+  }
+
+  /* ── Helpers CSS de cellule ── */
+  function cellCls(s,r,c){
+    const f = BB.get(s.fill,r,c);
+    const m = BB.get(s.mark,r,c);
+    const sep = [
+      ((c+1)%5===0 && c<s.sz-1) ? 'sb' : '',
+      ((r+1)%5===0 && r<s.sz-1) ? 'sr' : ''
+    ].filter(Boolean);
+    return ['cell', f?'fill' : m?'mark' : '', ...sep].filter(Boolean).join(' ');
+  }
+
+  /* ── Mises à jour incrémentales (O(1) par appel) ── */
+  const upCell = (s,r,c) => { const el=C[r]?.[c]; if(el) el.className=cellCls(s,r,c); };
+  const upRow  = (s,r)   => { RQ[r]?.classList.toggle('done', GS.rowDone(s,r)); };
+  const upCol  = (s,c)   => { CQ[c]?.classList.toggle('done', GS.colDone(s,c)); };
+
+  function refreshClues(s){
+    for(let r=0;r<s.sz;r++) upRow(s,r);
+    for(let c=0;c<s.sz;c++) upCol(s,c);
+  }
+
+  function afterMove(s,r,c){ upCell(s,r,c); upRow(s,r); upCol(s,c); }
+
+  const setTimer = ms  => { const e=$('timer');  if(e) e.textContent=fmt(ms); };
+  const showWin  = (ms,mv) => {
+    $('winfo').textContent = `Résolu en ${fmt(ms)} · ${mv} coup${mv>1?'s':''}`;
+    $('win').classList.add('on');
+  };
+  const hideWin  = () => $('win').classList.remove('on');
+
+  return { build, afterMove, setTimer, showWin, hideWin };
+})();
+
+/* ╔══════════════════════════════════════════════════════════════╗
+   ║  ADAPTER — App (port d'entrée + composition root)            ║
+   ║  Logique de drag : action fixée au mousedown, cohérente      ║
+   ║  pour toutes les cellules survolées dans la même passe.       ║
+   ╚══════════════════════════════════════════════════════════════╝ */
+const App = (() => {
+  let st=null, idx=0, tmr=null;
+  // État du drag : mode (fill/mark), action (add/del), cellules visitées
+  let dr = { on:false, mode:null, act:null, seen:null };
+
+  /* ── Timer ── */
+  const tick = () => { if(st && !st.done) Renderer.setTimer(performance.now()-st.t0); };
+
+  /* ── Callbacks injectés dans le Renderer ── */
+  const onDown = (r,c,btn) => {
+    const mode = btn===2 ? 'mark' : 'fill';
+    const act  = mode==='fill'
+      ? (BB.get(st.fill,r,c) ? 'del':'add')
+      : (BB.get(st.mark,r,c) ? 'del':'add');
+    dr = { on:true, mode, act, seen: new Set([`${r},${c}`]) };
+    applyDrag(r,c);
+  };
+
+  const onOver = (r,c) => {
+    if(!dr.on) return;
+    const key=`${r},${c}`;
+    if(dr.seen.has(key)) return;
+    dr.seen.add(key);
+    applyDrag(r,c);
+  };
+
+  /* ── Application cohérente de l'action de drag ── */
+  const applyDrag = (r,c) => {
+    if(dr.mode==='fill'){
+      if(dr.act==='add' && !BB.get(st.fill,r,c)) goFill(r,c);
+      if(dr.act==='del' &&  BB.get(st.fill,r,c)) goFill(r,c);
+    } else {
+      if(dr.act==='add' && !BB.get(st.mark,r,c)) goMark(r,c);
+      if(dr.act==='del' &&  BB.get(st.mark,r,c)) goMark(r,c);
+    }
+  };
+
+  /* ── Transitions d'état ── */
+  const goFill = (r,c) => {
+    const next = GS.doFill(st,r,c);
+    if(next===st) return;
+    st=next;
+    Renderer.afterMove(st,r,c);
+    if(st.done){
+      clearInterval(tmr);
+      Renderer.setTimer(st.ms);
+      setTimeout(()=>Renderer.showWin(st.ms, st.mv), 680);
+    }
+  };
+
+  const goMark = (r,c) => {
+    const next = GS.doMark(st,r,c);
+    if(next===st) return;
+    st=next;
+    Renderer.afterMove(st,r,c);
+  };
+
+  /* ── Chargement d'un puzzle ── */
+  const load = i => {
+    clearInterval(tmr);
+    Renderer.hideWin();
+    idx = ((i % PUZZLES.length) + PUZZLES.length) % PUZZLES.length;
+    dr  = { on:false, mode:null, act:null, seen:null };
+    st  = GS.init(PUZZLES[idx]);
+    Renderer.build(st, onDown, onOver);
+    document.getElementById('psel').value = idx;
+    Renderer.setTimer(0);
+    tmr = setInterval(tick, 500);
+  };
+
+  // Fin du drag sur tout le document
+  document.addEventListener('mouseup',  ()=>{ dr.on=false; });
+  document.addEventListener('touchend', ()=>{ dr.on=false; });
+
+  /* ── Bootstrap ── */
+  const init = () => {
+    const sel = document.getElementById('psel');
+    PUZZLES.forEach((p,i)=>{
+      const o=document.createElement('option');
+      o.value=i; o.textContent=p.name;
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change', e=>load(+e.target.value));
+    document.getElementById('breset').addEventListener('click', ()=>load(idx));
+    document.getElementById('bnext').addEventListener('click', ()=>load(idx+1));
+    load(0);
+  };
+
+  return { init };
+})();
+
+document.addEventListener('DOMContentLoaded', App.init);
+</script>
+</body>
+</html>
+
