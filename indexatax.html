@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ataxx — Jeu de Stratégie</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg : #0d1117;
+      --surface : #161b22;
+      --surface2: #21262d;
+      --border : #30363d;
+      --txt : #e6edf3;
+      --muted : #8b949e;
+      --blue : #58a6ff;
+      --blue-d : #1f6feb;
+      --blue-bg : rgba(31,111,235,.15);
+      --red : #f85149;
+      --red-d : #b91c1c;
+      --red-bg : rgba(248,81,73,.15);
+      --green : #3fb950;
+      --amber : #d29922;
+      --purple : #a371f7;
+    }
+
+    body {
+      background : var(--bg);
+      color : var(--txt);
+      font-family : -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      min-height : 100dvh;
+      display : flex;
+      flex-direction: column;
+      align-items : center;
+      padding : 16px 8px 32px;
+      gap : 14px;
+    }
+
+    /* ── Titre ────────────────────────────────────── */
+    .title {
+      font-size : clamp(1.6rem, 6vw, 2.4rem);
+      font-weight : 900;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      background : linear-gradient(90deg, var(--blue), var(--purple) 45%, var(--red));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-align : center;
+    }
+    .subtitle {
+      text-align : center;
+      font-size : .6rem;
+      color : var(--muted);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    /* ── Contrôles ────────────────────────────────── */
+    .controls {
+      display : flex;
+      gap : 8px;
+      flex-wrap : wrap;
+      justify-content: center;
+      align-items : flex-end;
+    }
+    .ctrl { display: flex; flex-direction: column; gap: 3px; }
+    .ctrl-lbl { font-size: .6rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    select {
+      background : var(--surface2);
+      color : var(--txt);
+      border : 1px solid var(--border);
+      border-radius: 6px;
+      padding : 6px 10px;
+      font-size : .82rem;
+      cursor : pointer;
+      outline : none;
+    }
+    select:focus { border-color: var(--blue); }
+    .btn {
+      background : var(--blue-d);
+      color : #fff;
+      border : none;
+      border-radius: 6px;
+      padding : 7px 14px;
+      font-size : .82rem;
+      font-weight : 700;
+      cursor : pointer;
+      transition : background .2s;
+    }
+    .btn:hover { background: var(--blue); }
+    .btn:active { transform: scale(.97); }
+
+    /* ── Scores ───────────────────────────────────── */
+    .scores {
+      display : grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap : 8px;
+      align-items : center;
+      width : 100%;
+      max-width : 400px;
+    }
+    .card {
+      background : var(--surface);
+      border : 2px solid var(--border);
+      border-radius: 10px;
+      padding : 8px 12px;
+      text-align : center;
+      transition : all .3s;
+    }
+    .card.blue { border-color: var(--blue-d); }
+    .card.blue.active {
+      border-color: var(--blue);
+      background : var(--blue-bg);
+      box-shadow : 0 0 16px rgba(88,166,255,.3);
+      transform : translateY(-2px);
+    }
+    .card.red { border-color: var(--red-d); }
+    .card.red.active {
+      border-color: var(--red);
+      background : var(--red-bg);
+      box-shadow : 0 0 16px rgba(248,81,73,.3);
+      transform : translateY(-2px);
+    }
+    .card-lbl { font-size: .6rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .card-num { font-size: 2rem; font-weight: 900; line-height: 1; }
+    .card.blue .card-num { color: var(--blue); }
+    .card.red .card-num { color: var(--red); }
+    .vs { font-size: .7rem; color: var(--muted); font-weight: 700; text-align: center; }
+
+    /* ── Barre de statut ──────────────────────────── */
+    .status {
+      background : var(--surface);
+      border : 1px solid var(--border);
+      border-radius: 8px;
+      padding : 7px 18px;
+      font-size : .82rem;
+      font-weight : 600;
+      text-align : center;
+      width : 100%;
+      max-width : 420px;
+      transition : all .3s;
+    }
+    .status.amber { color: var(--amber); border-color: var(--amber); }
+    .status.green { color: var(--green); border-color: var(--green); }
+
+    /* ── Plateau ──────────────────────────────────── */
+    .board-wrap { width: 100%; max-width: 420px; }
+
+    #board {
+      display : grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap : 3px;
+      background : var(--surface2);
+      padding : 8px;
+      border-radius : 14px;
+      border : 1px solid var(--border);
+      box-shadow : 0 20px 60px rgba(0,0,0,.6);
+      user-select : none;
+    }
+
+    .cell {
+      aspect-ratio : 1;
+      background : var(--surface);
+      border-radius : 5px;
+      display : flex;
+      align-items : center;
+      justify-content: center;
+      cursor : pointer;
+      transition : background .12s, filter .12s;
+      position : relative;
+    }
+    .cell:hover { filter: brightness(1.5); }
+    .cell.sel {
+      background : rgba(88,166,255,.2);
+      outline : 2px solid var(--blue);
+      outline-offset: -2px;
+    }
+    .cell.clone-hint { background: rgba(63,185,80,.14); }
+    .cell.jump-hint { background: rgba(210,153,34,.14); }
+
+    /* ── Pièces ───────────────────────────────────── */
+    .piece {
+      width : 76%;
+      height : 76%;
+      border-radius: 50%;
+      position : relative;
+      transition : transform .18s, box-shadow .18s;
+      box-shadow : 0 3px 8px rgba(0,0,0,.55),
+                     inset 0 1px 0 rgba(255,255,255,.15);
+    }
+    /* Reflet lumineux */
+    .piece::before {
+      content : '';
+      position : absolute;
+      top: 13%; left: 17%;
+      width: 36%; height: 26%;
+      border-radius: 50%;
+      background : rgba(255,255,255,.25);
+    }
+    .p1 { background: radial-gradient(circle at 38% 33%, #93c5fd, #1d4ed8); }
+    .p2 { background: radial-gradient(circle at 38% 33%, #fca5a5, #991b1b); }
+
+    .cell:hover .piece { transform: scale(1.08); }
+    .cell.sel .piece {
+      transform : scale(1.13);
+      box-shadow: 0 0 18px rgba(88,166,255,.75);
+    }
+    .cell.clone-hint:hover .piece,
+    .cell.jump-hint:hover .piece { transform: scale(1.05); }
+
+    /* ── Indicateurs de coups ─────────────────────── */
+    .hint-dot {
+      width : 28%;
+      height : 28%;
+      border-radius: 50%;
+      background : var(--green);
+      opacity : .85;
+      pointer-events: none;
+    }
+    .hint-jump {
+      background : transparent;
+      border : 2px dashed var(--amber);
+      width : 36%;
+      height : 36%;
+      border-radius: 50%;
+      opacity : .85;
+      pointer-events: none;
+    }
+
+    /* ── Légende ──────────────────────────────────── */
+    .legend { display: flex; gap: 16px; font-size: .7rem; color: var(--muted); }
+    .leg { display: flex; align-items: center; gap: 5px; }
+    .leg-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .leg-dot.g { background: var(--green); }
+    .leg-dot.a { background: var(--amber); }
+
+    /* ── Règles ───────────────────────────────────── */
+    details {
+      max-width : 420px;
+      width : 100%;
+      background : var(--surface);
+      border : 1px solid var(--border);
+      border-radius: 8px;
+      overflow : hidden;
+    }
+    summary {
+      padding : 8px 14px;
+      font-size: .78rem;
+      font-weight: 600;
+      cursor : pointer;
+      color : var(--muted);
+    }
+    summary:hover { color: var(--txt); }
+    .rules-body {
+      padding : 0 14px 12px;
+      font-size: .74rem;
+      color : var(--muted);
+      line-height: 1.6;
+    }
+    .rules-body b { color: var(--txt); }
+  </style>
+</head>
+<body>
+
+<div>
+  <h1 class="title">Ataxx</h1>
+  <p class="subtitle">Bitboard BigInt · Minimax α-β · Architecture Hexagonale</p>
+</div>
+
+<div class="controls">
+  <div class="ctrl">
+    <span class="ctrl-lbl">Mode</span>
+    <select id="mode">
+      <option value="vsAI">Humain vs IA</option>
+      <option value="vsHuman">Humain vs Humain</option>
+    </select>
+  </div>
+  <div class="ctrl">
+    <span class="ctrl-lbl">Difficulté IA</span>
+    <select id="depth">
+      <option value="2">Facile</option>
+      <option value="4" selected>Moyen</option>
+      <option value="6">Difficile</option>
+    </select>
+  </div>
+  <button class="btn" id="btn-new">↺ Nouvelle partie</button>
+</div>
+
+<div class="scores">
+  <div class="card blue" id="c1">
+    <div class="card-lbl">🔵 Joueur 1</div>
+    <div class="card-num" id="s1">2</div>
+  </div>
+  <div class="vs">VS</div>
+  <div class="card red" id="c2">
+    <div class="card-lbl" id="c2-lbl">🤖 IA</div>
+    <div class="card-num" id="s2">2</div>
+  </div>
+</div>
+
+<div class="status" id="status">Initialisation…</div>
+
+<div class="board-wrap">
+  <div id="board"></div>
+</div>
+
+<div class="legend">
+  <div class="leg"><div class="leg-dot g"></div><span>Clone (1 case)</span></div>
+  <div class="leg"><div class="leg-dot a"></div><span>Saut (2 cases)</span></div>
+</div>
+
+<details>
+  <summary>📖 Règles du jeu</summary>
+  <div class="rules-body">
+    <b>Objectif :</b> avoir le plus de pièces à la fin.<br>
+    <b>Clone</b> (point vert) : copie une pièce vers une case voisine (1 case). La pièce originale reste.<br>
+    <b>Saut</b> (cercle pointillé) : déplace une pièce à 2 cases. L'originale disparaît.<br>
+    <b>Capture :</b> toute pièce adverse adjacente à la destination est convertie à votre couleur.<br>
+    <b>Fin :</b> plateau plein, une couleur éliminée, ou plus aucun coup possible.
+  </div>
+</details>
+
+<script>
+'use strict';
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║ A T A X X — Architecture Hexagonale ║
+// ║ Programmation Fonctionnelle · Pas de classes ║
+// ║ Moteur Bitboard (BigInt, 49 bits) · Minimax + Élagage α-β ║
+// ╠══════════════════════════════════════════════════════════════╣
+// ║ COUCHES ║
+// ║ 1. Domaine : BitBoard, GameRules (fonctions pures) ║
+// ║ 2. Ports : PlayerPort, RenderPort (contrats) ║
+// ║ 3. Adapters : MinimaxAI (secondaire), DOMAdapter (primaire) ║
+// ║ 4. App : GameOrchestrator (cas d'utilisation) ║
+// ╚══════════════════════════════════════════════════════════════╝
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// DOMAINE — MOTEUR BITBOARD
+// Représentation binaire d'un échiquier 7×7 (49 bits en BigInt).
+// Toutes les opérations sont des fonctions pures sans état.
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const BitBoard = (() => {
+  const SIZE = 7;
+  const N = SIZE * SIZE; // 49 cases, indices 0–48
+  const FULL = (1n << BigInt(N)) - 1n; // 49 bits à 1
+
+  // ── Précalcul des masques de voisinage ─────────────────────
+  // cloneMasks[i] : bitboard des cases à distance de Chebyshev = 1
+  const cloneMasks = Array.from({ length: N }, (_, i) => {
+    const row = (i / SIZE) | 0, col = i % SIZE;
+    let m = 0n;
+    for (let dr = -1; dr <= 1; dr++)
+      for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const r = row + dr, c = col + dc;
+        if (r >= 0 && r < SIZE && c >= 0 && c < SIZE)
+          m |= 1n << BigInt(r * SIZE + c);
+      }
+    return m;
+  });
+
+  // jumpMasks[i] : bitboard des cases à distance de Chebyshev = 2
+  const jumpMasks = Array.from({ length: N }, (_, i) => {
+    const row = (i / SIZE) | 0, col = i % SIZE;
+    let m = 0n;
+    for (let dr = -2; dr <= 2; dr++)
+      for (let dc = -2; dc <= 2; dc++) {
+        if (Math.max(Math.abs(dr), Math.abs(dc)) !== 2) continue;
+        const r = row + dr, c = col + dc;
+        if (r >= 0 && r < SIZE && c >= 0 && c < SIZE)
+          m |= 1n << BigInt(r * SIZE + c);
+      }
+    return m;
+  });
+
+  // ── Opérations primitives sur bitboards ────────────────────
+  // Position du bit le moins significatif (LSB)
+  const lsb = bb => {
+    let p = 0, n = bb;
+    while ((n & 1n) === 0n) { n >>= 1n; p++; }
+    return p;
+  };
+
+  // Nombre de bits à 1 (Hamming weight)
+  const popcount = bb => {
+    let c = 0, n = bb;
+    while (n > 0n) { c++; n &= n - 1n; } // clear LSB à chaque itération
+    return c;
+  };
+
+  // Test de présence d'un bit
+  const has = (bb, i) => ((bb >> BigInt(i)) & 1n) === 1n;
+
+  // Conversion bitboard → tableau de positions
+  const toList = bb => {
+    const r = []; let n = bb;
+    while (n > 0n) { r.push(lsb(n)); n &= n - 1n; }
+    return r;
+  };
+
+  return { SIZE, N, FULL, cloneMasks, jumpMasks, lsb, popcount, has, toList };
+})();
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// DOMAINE — RÈGLES DU JEU
+// Fonctions pures ; aucun effet de bord ; états immuables.
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const GameRules = (() => {
+  const { FULL, cloneMasks, jumpMasks, lsb, popcount, toList } = BitBoard;
+
+  // État initial : P1 aux coins TL(0) + BR(48), P2 aux coins TR(6) + BL(42)
+  const initState = () => ({
+    p1 : (1n << 0n) | (1n << 48n),
+    p2 : (1n << 6n) | (1n << 42n),
+    turn: 1,
+    over: false,
+  });
+
+  // Cases vides = complément des deux bitboards maskés sur 49 bits
+  const freeSquares = (p1, p2) => FULL & ~(p1 | p2);
+
+  // ── Génération de coups ─────────────────────────────────────
+  // Les clones sont générés en premier → meilleur tri de coups pour α-β
+  const genMovesFor = (p1, p2, player) => {
+    const mine = player === 1 ? p1 : p2;
+    const empty = freeSquares(p1, p2);
+    const clones = [], jumps = [];
+
+    let bits = mine;
+    while (bits > 0n) {
+      const from = lsb(bits); bits &= bits - 1n; // pop LSB
+
+      let cd = cloneMasks[from] & empty;
+      while (cd > 0n) { clones.push({ from, to: lsb(cd), jump: false }); cd &= cd - 1n; }
+
+      let jd = jumpMasks[from] & empty;
+      while (jd > 0n) { jumps.push({ from, to: lsb(jd), jump: true }); jd &= jd - 1n; }
+    }
+    return [...clones, ...jumps]; // clones d'abord = heuristique de tri de coups
+  };
+
+  const genMoves = state => genMovesFor(state.p1, state.p2, state.turn);
+
+  // ── Application d'un coup → nouvel état immuable ────────────
+  const applyMove = (state, { from, to, jump }) => {
+    const toBit = 1n << BigInt(to);
+    const frBit = 1n << BigInt(from);
+    const adj = cloneMasks[to]; // cases adjacentes à la destination
+
+    let p1 = state.p1, p2 = state.p2;
+
+    if (state.turn === 1) {
+      p1 |= toBit;
+      if (jump) p1 &= ~frBit; // saut : retirer la pièce source
+      const cap = adj & p2; // pièces adverses capturées
+      p2 &= ~cap; p1 |= cap;
+    } else {
+      p2 |= toBit;
+      if (jump) p2 &= ~frBit;
+      const cap = adj & p1;
+      p1 &= ~cap; p2 |= cap;
+    }
+
+    const next = state.turn === 1 ? 2 : 1;
+
+    // ── Fin de partie ─────────────────────────────────────────
+    if ((p1 | p2) === FULL || p1 === 0n || p2 === 0n)
+      return { p1, p2, turn: next, over: true };
+
+    // ── Gestion du passe (joueur suivant bloqué) ──────────────
+    if (genMovesFor(p1, p2, next).length === 0) {
+      // Si les deux joueurs sont bloqués → fin de partie
+      if (genMovesFor(p1, p2, state.turn).length === 0)
+        return { p1, p2, turn: next, over: true };
+      // Sinon, le tour passe au joueur courant (qui peut encore jouer)
+      return { p1, p2, turn: state.turn, over: false };
+    }
+
+    return { p1, p2, turn: next, over: false };
+  };
+
+  const score = s => ({ p1: popcount(s.p1), p2: popcount(s.p2) });
+  const winner = s => { const sc = score(s); return sc.p1 > sc.p2 ? 1 : sc.p2 > sc.p1 ? 2 : 0; };
+
+  // Destinations valides pour une pièce sélectionnée (pour l'UI)
+  const validDests = (state, pos) => {
+    const empty = freeSquares(state.p1, state.p2);
+    return {
+      clones: toList(cloneMasks[pos] & empty),
+      jumps : toList(jumpMasks[pos] & empty),
+    };
+  };
+
+  return { initState, genMoves, genMovesFor, applyMove, score, winner, validDests };
+})();
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// PORT — INTERFACE JOUEUR (Contrat / Port secondaire)
+//
+// PlayerPort :: {
+// getMove : (state: GameState, depth: number) => Move | null
+// }
+//
+// L'IA implémente ce port via Minimax.
+// Le joueur humain l'implémente via les clics DOM (adapter primaire).
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ADAPTATEUR SECONDAIRE — IA MINIMAX (Driven / Secondary Adapter)
+// Implémente PlayerPort via l'algorithme Minimax avec élagage α-β.
+// P2 = joueur maximisant (IA) | P1 = joueur minimisant (humain)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const MinimaxAI = (() => {
+  const { genMoves, genMovesFor, applyMove, score, winner } = GameRules;
+
+  // ── Fonction d'évaluation heuristique ──────────────────────
+  // Positive quand P2 (IA) est avantagé.
+  const heuristic = state => {
+    if (state.over) {
+      const w = winner(state);
+      return w === 2 ? 1_000_000 : w === 1 ? -1_000_000 : 0;
+    }
+    const s = score(state);
+    const diff = (s.p2 - s.p1) * 10; // avantage en pièces
+
+    // Mobilité relative (nombre de coups disponibles)
+    const mob2 = genMovesFor(state.p1, state.p2, 2).length;
+    const mob1 = genMovesFor(state.p1, state.p2, 1).length;
+
+    return diff + (mob2 - mob1);
+  };
+
+  // ── Algorithme Minimax récursif avec élagage Alpha-Bêta ────
+  const alphabeta = (state, depth, alpha, beta) => {
+    if (depth === 0 || state.over) return heuristic(state);
+
+    const moves = genMoves(state);
+    if (!moves.length) return heuristic(state);
+
+    if (state.turn === 2) { // P2 (IA) : maximise
+      let v = -Infinity;
+      for (const m of moves) {
+        v = Math.max(v, alphabeta(applyMove(state, m), depth - 1, alpha, beta));
+        alpha = Math.max(alpha, v);
+        if (alpha >= beta) break; // ✂ coupure bêta
+      }
+      return v;
+    } else { // P1 (humain) : minimise
+      let v = Infinity;
+      for (const m of moves) {
+        v = Math.min(v, alphabeta(applyMove(state, m), depth - 1, alpha, beta));
+        beta = Math.min(beta, v);
+        if (alpha >= beta) break; // ✂ coupure alpha
+      }
+      return v;
+    }
+  };
+
+  // ── Implémentation du PlayerPort ───────────────────────────
+  const getMove = (state, depth) => {
+    const moves = genMoves(state);
+    if (!moves.length) return null;
+
+    let best = null, bestV = -Infinity;
+    for (const m of moves) {
+      const v = alphabeta(applyMove(state, m), depth - 1, -Infinity, Infinity);
+      if (v > bestV) { bestV = v; best = m; }
+    }
+    return best;
+  };
+
+  return { getMove }; // expose uniquement le port
+})();
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// APPLICATION — ORCHESTRATEUR DE JEU (Cas d'utilisation)
+// Coordonne le domaine et les adapters ; gère l'état applicatif.
+// Publie un ViewModel immutable à chaque changement (pattern pub/sub).
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+APPLICATION — ORCHESTRATEUR DE JEU (Cas d'utilisation)
+// Coordonne le domaine et les adapters ; gère l'état applicatif.
+// Publie un ViewModel immutable à chaque changement (pattern pub/sub).
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const GameOrchestrator = (() => {
+  const { initState, applyMove, score, winner, validDests } = GameRules;
+  const { has } = BitBoard;
+
+  // ── État applicatif (mutable, localisé ici uniquement) ─────
+  let state = initState();
+  let selected = null; // case sélectionnée par le joueur humain
+  let cfg = { mode: 'vsAI', depth: 4 };
+  let aiPending = false;
+  let listeners = [];
+
+  const notify = vm => listeners.forEach(fn => fn(vm));
+  const on = fn => { listeners.push(fn); };
+
+  // ── Constructeur du ViewModel (projection de l'état) ───────
+  const buildVM = () => Object.freeze({
+    ...state,
+    score : score(state),
+    winner : state.over ? winner(state) : null,
+    selected,
+    dests : selected !== null
+                 ? validDests(state, selected)
+                 : { clones: [], jumps: [] },
+    aiPending,
+    cfg : { ...cfg },
+  });
+
+  const isHumanTurn = () => cfg.mode === 'vsHuman' || state.turn === 1;
+
+  // ── Planification du coup IA (asynchrone pour libérer l'UI) ─
+  const scheduleAI = () => {
+    if (state.over || aiPending || isHumanTurn()) return;
+    aiPending = true;
+    notify(buildVM()); // afficher "IA réfléchit…"
+    setTimeout(() => {
+      const move = MinimaxAI.getMove(state, cfg.depth);
+      if (move) state = applyMove(state, move);
+      aiPending = false;
+      notify(buildVM());
+    }, 60); // délai pour le rendu
+  };
+
+  // ── Port d'entrée primaire : clic sur une case ──────────────
+  const clickSquare = pos => {
+    if (state.over || aiPending || !isHumanTurn()) return;
+
+    const myBB = state.turn === 1 ? state.p1 : state.p2;
+
+    if (has(myBB, pos)) { // sélectionner une pièce
+      selected = pos;
+      notify(buildVM());
+      return;
+    }
+
+    if (selected !== null) { // tenter un coup
+      const d = validDests(state, selected);
+      const isClone = d.clones.includes(pos);
+      const isJump = d.jumps.includes(pos);
+
+      if (isClone || isJump) {
+        state = applyMove(state, { from: selected, to: pos, jump: isJump });
+        selected = null;
+        notify(buildVM());
+        scheduleAI();
+        return;
+      }
+    }
+
+    selected = null; // désélectionner
+    notify(buildVM());
+  };
+
+  // ── Port d'entrée : démarrer / redémarrer une partie ───────
+  const newGame = newCfg => {
+    cfg = { ...cfg, ...newCfg };
+    state = initState();
+    selected = null;
+    aiPending = false;
+    notify(buildVM());
+    scheduleAI(); // IA joue en premier si P1 est IA (non applicable ici)
+  };
+
+  return { clickSquare, newGame, on };
+})();
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ADAPTATEUR PRIMAIRE — UI DOM (Driving / Primary Adapter)
+// Traduit les événements DOM → appels vers l'orchestrateur.
+// Traduit le ViewModel → mutations DOM.
+// Implémente RenderPort (output) et câble PlayerPort (input humain).
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const DOMAdapter = (() => {
+  const { SIZE, has } = BitBoard;
+
+  // ── Rendu du plateau ───────────────────────────────────────
+  const renderBoard = vm => {
+    const board = document.getElementById('board');
+    board.innerHTML = '';
+
+    for (let sq = 0; sq < SIZE * SIZE; sq++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+
+      const isP1 = has(vm.p1, sq);
+      const isP2 = has(vm.p2, sq);
+      const isSel = vm.selected === sq;
+      const isCl = vm.dests.clones.includes(sq);
+      const isJmp = vm.dests.jumps.includes(sq);
+
+      if (isSel) cell.classList.add('sel');
+      if (isCl) cell.classList.add('clone-hint');
+      if (isJmp) cell.classList.add('jump-hint');
+
+      if (isP1) cell.innerHTML = `<div class="piece p1"></div>`;
+      else if (isP2) cell.innerHTML = `<div class="piece p2"></div>`;
+      else if (isCl || isJmp) cell.innerHTML = `<div class="${isJmp ? 'hint-jump' : 'hint-dot'}"></div>`;
+
+      cell.addEventListener('click', () => GameOrchestrator.clickSquare(sq));
+      board.appendChild(cell);
+    }
+  };
+
+  // ── Rendu des scores ────────────────────────────────────────
+  const renderScores = vm => {
+    document.getElementById('s1').textContent = vm.score.p1;
+    document.getElementById('s2').textContent = vm.score.p2;
+
+    const active = !vm.over;
+    document.getElementById('c1').className = `card blue${active && vm.turn === 1 ? ' active' : ''}`;
+    document.getElementById('c2').className = `card red${active && vm.turn === 2 ? ' active' : ''}`;
+    document.getElementById('c2-lbl').textContent =
+      vm.cfg.mode === 'vsAI' ? '🤖 IA' : '🔴 Joueur 2';
+  };
+
+  // ── Rendu du statut ─────────────────────────────────────────
+  const renderStatus = vm => {
+    const el = document.getElementById('status');
+
+    if (vm.aiPending) {
+      el.textContent = '🤖 L\'IA réfléchit…';
+      el.className = 'status amber';
+      return;
+    }
+
+    if (vm.over) {
+      el.textContent =
+          vm.winner === 0 ? '🤝 Égalité parfaite !'
+        : vm.winner === 1 ? '🏆 Joueur 1 (Bleu) gagne !'
+        : vm.cfg.mode === 'vsAI' ? '🤖 L\'IA (Rouge) gagne !' : '🔴 Joueur 2 (Rouge) gagne !';
+      el.className = 'status green';
+      return;
+    }
+
+    const aiTurn = vm.cfg.mode === 'vsAI' && vm.turn === 2;
+    el.textContent =
+        aiTurn ? '🔴 L\'IA joue…'
+      : vm.turn === 1 ? '🔵 Joueur 1 — cliquez une pièce bleue'
+      : '🔴 Joueur 2 — cliquez une pièce rouge';
+    el.className = 'status';
+  };
+
+  // ── Rendu complet (implémente RenderPort) ──────────────────
+  const render = vm => {
+    renderBoard(vm);
+    renderScores(vm);
+    renderStatus(vm);
+  };
+
+  // ── Initialisation et câblage ───────────────────────────────
+  const init = () => {
+    GameOrchestrator.on(render);
+
+    const modeEl = document.getElementById('mode');
+    const depthEl = document.getElementById('depth');
+
+    document.getElementById('btn-new').addEventListener('click', () =>
+      GameOrchestrator.newGame({ mode: modeEl.value, depth: +depthEl.value })
+    );
+
+    // Lancer la première partie avec les valeurs initiales des sélecteurs
+    GameOrchestrator.newGame({ mode: modeEl.value, depth: +depthEl.value });
+  };
+
+  return { init };
+})();
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// AMORÇAGE — Bootstrap
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+document.addEventListener('DOMContentLoaded', DOMAdapter.init);
+</script>
+</body>
+</html>
