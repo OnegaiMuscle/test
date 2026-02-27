@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>TETRIS</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:#070710;
+  display:flex;align-items:center;justify-content:center;
+  min-height:100%;
+  font-family:'Courier New',monospace;
+  color:#ccd;
+  user-select:none;-webkit-user-select:none;
+}
+#root{display:flex;gap:14px;align-items:flex-start}
+#gw{position:relative;box-shadow:0 0 40px rgba(100,120,255,.25)}
+canvas{display:block}
+#side{
+  display:flex;flex-direction:column;gap:10px;
+  width:108px;
+}
+.box{
+  background:#0b0b1c;border:1px solid #1e1e3a;border-radius:5px;padding:9px 11px;
+}
+.bt{font-size:8px;color:#3a3a5c;letter-spacing:3px;text-transform:uppercase;margin-bottom:4px}
+.bv{font-size:18px;font-weight:700;color:#99aacc}
+#nc{display:block;margin:4px auto 0}
+/* ─ Overlay ─ */
+#ov{
+  position:absolute;inset:0;
+  background:rgba(7,7,16,.9);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+  backdrop-filter:blur(2px);
+}
+#ov h1{font-size:28px;letter-spacing:8px;color:#8899ff;text-shadow:0 0 28px rgba(130,150,255,.7)}
+#ov-sc{font-size:13px;color:#556;min-height:18px}
+#ov-btn{
+  background:0 0;color:#8899ff;border:1px solid #8899ff;
+  padding:10px 28px;font:13px/1 'Courier New',monospace;
+  letter-spacing:3px;cursor:pointer;transition:background .15s,box-shadow .15s;
+}
+#ov-btn:hover{background:rgba(136,153,255,.12);box-shadow:0 0 16px rgba(136,153,255,.3)}
+/* ─ Contrôles tactiles ─ */
+#tc{
+  display:none;position:fixed;bottom:0;left:0;right:0;
+  background:rgba(7,7,16,.94);border-top:1px solid #181830;
+  padding:10px;flex-direction:column;gap:8px;align-items:center;
+}
+.tr{display:flex;gap:8px}
+.tb{
+  width:52px;height:52px;
+  background:rgba(100,110,200,.13);border:1px solid rgba(100,110,200,.32);
+  border-radius:7px;display:flex;align-items:center;justify-content:center;
+  font-size:18px;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;transition:background .08s;
+}
+.tb:active,.tb.on{background:rgba(100,110,200,.32)}
+.wide{width:116px;font-size:11px;letter-spacing:1px}
+@media(max-width:560px),(pointer:coarse){
+  #tc{display:flex}
+  body{align-items:flex-start;padding-top:12px;padding-bottom:136px;overflow-y:auto}
+  #root{flex-direction:column;align-items:center}
+  #side{flex-direction:row;flex-wrap:wrap;width:auto;justify-content:center}
+}
+</style>
+</head>
+<body>
+
+<div id="root">
+  <div id="gw">
+    <canvas id="board"></canvas>
+    <div id="ov">
+      <h1>TETRIS</h1>
+      <div id="ov-sc"></div>
+      <button id="ov-btn">JOUER</button>
+    </div>
+  </div>
+
+  <div id="side">
+    <div class="box"><div class="bt">Score</div><div class="bv" id="sc">0</div></div>
+    <div class="box"><div class="bt">Niveau</div><div class="bv" id="lv">1</div></div>
+    <div class="box"><div class="bt">Lignes</div><div class="bv" id="ln">0</div></div>
+    <div class="box">
+      <div class="bt">Suivant</div>
+      <canvas id="nc" width="90" height="72"></canvas>
+    </div>
+    <div class="box" style="font-size:9px;color:#2a2a44;line-height:1.7">
+      ←→ déplace<br>↑/X tourne<br>↓ descend<br>ESPACE drop
+    </div>
+  </div>
+</div>
+
+<div id="tc">
+  <div class="tr">
+    <div class="tb" id="t-l">◀</div>
+    <div class="tb" id="t-rot">↻</div>
+    <div class="tb" id="t-r">▶</div>
+    <div class="tb" id="t-drp">⬇</div>
+  </div>
+  <div class="tr">
+    <div class="tb wide" id="t-sd">▼ SOFT DROP</div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ════════════════════════════════════════════════════════════════
+// DOMAINE — Constantes & Données
+// ════════════════════════════════════════════════════════════════
+// Architecture hexagonale : Domain | Application | Infrastructure
+// Logique pure en programmation fonctionnelle, sans classes.
+//
+// BITBOARD
+//   Plateau : tableau de ROWS entiers 10 bits
+//     bit k → colonne k  (0 = gauche, 9 = droite)
+//   Tétromino : 4 masques 4 bits dans sa boîte 4×4
+//     bit k → colonne k dans la boîte  (0 = gauche, 3 = droite)
+//   Placement colonne x : masque_ligne_piece << x
+// ════════════════════════════════════════════════════════════════
+
+const COLS = 10, ROWS = 20, SZ = 28;
+const FULL = (1 << COLS) - 1;  // 0b1111111111 = 1023
+const SCORE_TBL = [0, 100, 300, 500, 800];
+
+// Tétrominos : chaque rotation = [r0, r1, r2, r3] masques 4 bits
+// bit 0 = col gauche de la pièce, bit 3 = col droite
+const TETS = [
+  // I — cyan
+  { cl:'#00e5ff', hi:'rgba(255,255,255,.42)', sh:'rgba(0,0,0,.42)',
+    r:[[0,0b1111,0,0],[0b0010,0b0010,0b0010,0b0010],
+       [0,0,0b1111,0],[0b0100,0b0100,0b0100,0b0100]] },
+  // O — jaune
+  { cl:'#ffd600', hi:'rgba(255,255,255,.42)', sh:'rgba(0,0,0,.42)',
+    r:[[0b0011,0b0011,0,0],[0b0011,0b0011,0,0],
+       [0b0011,0b0011,0,0],[0b0011,0b0011,0,0]] },
+  // T — violet
+  { cl:'#e040fb', hi:'rgba(255,255,255,.42)', sh:'rgba(0,0,0,.42)',
+    r:[[0b0010,0b0111,0,0],[0b0001,0b0011,0b0001,0],
+       [0,0b0111,0b0010,0],[0b0010,0b0011,0b0010,0]] },
+  // S — vert
+  { cl:'#69f0ae', hi:'rgba(255,255,255,.42)', sh:'rgba(0,0,0,.42)',
+    r:[[0b0110,0b0011,0,0],[0b0001,0b0011,0b0010,0],
+       [0b0110,0b0011,0,0],[0b0001,0b0011,0b0010,0]] },
+  // Z — rouge
+  { cl:'#ff5252', hi:'rgba(255,255,255,.42)', sh:'rgba(0,0,0,.42)',
+    r:[[0b0011,0b0110,0,0],[0b0010,0b0011,0b0001,0],
+       [0b0011,0b0110,0,0],[0b0010,0b0011,0b0001,0]] },
+  // J — bleu
+  { cl:'#448aff', hi:'rgba(255,255,255,.42)', sh:'rgba(0,0,0,.42)',
+    r:[[0b0001,0b0111,0,0],[0b0011,0b0001,0b0001,0],
+       [0,0b0111,0b0100,0],[0b0010,0b0010,0b0011,0]] },
+  // L — orange
+  { cl:'#ff9800', hi:'rgba(255,255,255,.42)', sh:'rgba(0,0,0,.42)',
+    r:[[0b0100,0b0111,0,0],[0b0001,0b0001,0b0011,0],
+       [0,0b0111,0b0001,0],[0b0011,0b0010,0b0010,0]] },
+];
+
+// ════════════════════════════════════════════════════════════════
+// DOMAINE — Plateau (Bitboard)
+// ════════════════════════════════════════════════════════════════
+
+// Crée un plateau vide
+const boardNew = () => ({
+  bits: new Array(ROWS).fill(0),                                    // masques collision
+  cols: Array.from({ length: ROWS }, () => new Array(COLS).fill(0)), // index couleur (0=vide, ti+1)
+});
+
+// Pose une pièce sur le plateau → nouveau plateau
+const boardLock = (board, ti, rots, x, y) => {
+  const bits = [...board.bits];
+  const cols = board.cols.map(r => [...r]);
+  for (let r = 0; r < 4; r++) {
+    if (!rots[r]) continue;
+    const by = y + r;
+    if (by < 0 || by >= ROWS) continue;
+    const shifted = x >= 0 ? rots[r] << x : rots[r] >> (-x);
+    bits[by] = (bits[by] | shifted) & FULL;
+    for (let c = 0; c < 4; c++) {
+      if (rots[r] & (1 << c)) {
+        const bx = x + c;
+        if (bx >= 0 && bx < COLS) cols[by][bx] = ti + 1;
+      }
+    }
+  }
+  return { bits, cols };
+};
+
+// Efface les lignes complètes → { board, n: lignesEffacées }
+const boardClear = board => {
+  const full = [];
+  for (let i = 0; i < ROWS; i++)
+    if ((board.bits[i] & FULL) === FULL) full.push(i);
+  if (!full.length) return { board, n: 0 };
+  const keep = (_, i) => !full.includes(i);
+  const n = full.length;
+  return {
+    board: {
+      bits: [...new Array(n).fill(0), ...board.bits.filter(keep)],
+      cols: [...Array.from({ length: n }, () => new Array(COLS).fill(0)),
+             ...board.cols.filter(keep)],
+    }, n,
+  };
+};
+
+// ════════════════════════════════════════════════════════════════
+// DOMAINE — Collision (cœur bitboard)
+// ════════════════════════════════════════════════════════════════
+
+// Vérifie si une pièce à (x, y) entre en collision
+const collides = (bits, rots, x, y) => {
+  for (let r = 0; r < 4; r++) {
+    if (!rots[r]) continue;
+    const by = y + r;
+    if (by >= ROWS) return true;   // plancher
+    if (by < 0)     continue;      // zone tampon au-dessus
+    if (x >= 0) {
+      const s = rots[r] << x;
+      if (s & ~FULL)       return true;  // mur droit  : bits > 9
+      if (s & bits[by])    return true;  // cellule occupée
+    } else {
+      const ax = -x;
+      const lm = (1 << ax) - 1;              // masque bits qui sortent à gauche
+      if (rots[r] & lm)            return true;  // mur gauche
+      if ((rots[r] >> ax) & bits[by]) return true;
+    }
+  }
+  return false;
+};
+
+// ════════════════════════════════════════════════════════════════
+// DOMAINE — Pièces
+// ════════════════════════════════════════════════════════════════
+
+const randTet = () => Math.floor(Math.random() * TETS.length);
+const getRots = (ti, rot) => TETS[ti].r[rot & 3];
+const SPAWN_X  = Math.floor((COLS - 4) / 2);  // = 3
+
+// Crée une pièce à sa position de spawn
+const pieceSpawn = ti => ({ ti, rot: 0, x: SPAWN_X, y: 0 });
+
+// Calcule la position Y du fantôme (drop preview)
+const calcGhostY = (bits, rots, x, y) => {
+  let gy = y;
+  while (!collides(bits, rots, x, gy + 1)) gy++;
+  return gy;
+};
+
+// Tente une rotation avec wall-kicks
+const KICKS = [0, -1, 1, -2, 2];
+const tryRotate = (bits, piece) => {
+  const nr   = (piece.rot + 1) & 3;
+  const nrot = getRots(piece.ti, nr);
+  for (const k of KICKS) {
+    const nx = piece.x + k;
+    if (!collides(bits, nrot, nx, piece.y))
+      return { ...piece, rot: nr, x: nx };
+  }
+  return piece;
+};
+
+// ════════════════════════════════════════════════════════════════
+// APPLICATION — État initial
+// ════════════════════════════════════════════════════════════════
+
+const stateInit = () => ({
+  board:   boardNew(),
+  cur:     pieceSpawn(randTet()),
+  nextTi:  randTet(),
+  score:   0,
+  level:   1,
+  lines:   0,
+  over:    false,
+  running: false,
+  dropAcc: 0,
+});
+
+// ════════════════════════════════════════════════════════════════
+// APPLICATION — Actions (fonctions pures, retournent un nouveau state)
+// ════════════════════════════════════════════════════════════════
+
+const actionMoveH = (st, dx) => {
+  if (!st.running || st.over) return st;
+  const rots = getRots(st.cur.ti, st.cur.rot);
+  const nx   = st.cur.x + dx;
+  if (collides(st.board.bits, rots, nx, st.cur.y)) return st;
+  return { ...st, cur: { ...st.cur, x: nx } };
+};
+
+const actionMoveDown = st => {
+  if (!st.running || st.over) return st;
+  const rots = getRots(st.cur.ti, st.cur.rot);
+  if (collides(st.board.bits, rots, st.cur.x, st.cur.y + 1))
+    return actionLockSpawn(st);
+  return { ...st, cur: { ...st.cur, y: st.cur.y + 1 } };
+};
+
+const actionRotate = st => {
+  if (!st.running || st.over) return st;
+  return { ...st, cur: tryRotate(st.board.bits, st.cur) };
+};
+
+const actionHardDrop = st => {
+  if (!st.running || st.over) return st;
+  const rots = getRots(st.cur.ti, st.cur.rot);
+  const gy   = calcGhostY(st.board.bits, rots, st.cur.x, st.cur.y);
+  return actionLockSpawn({
+    ...st,
+    cur:   { ...st.cur, y: gy },
+    score: st.score + (gy - st.cur.y) * 2,
+  });
+};
+
+// Verrouille la pièce courante, efface les lignes, fait apparaître la suivante
+const actionLockSpawn = st => {
+  const rots          = getRots(st.cur.ti, st.cur.rot);
+  const locked        = boardLock(st.board, st.cur.ti, rots, st.cur.x, st.cur.y);
+  const { board, n }  = boardClear(locked);
+  const newLines      = st.lines + n;
+  const newLevel      = Math.floor(newLines / 10) + 1;
+  const newScore      = st.score + (SCORE_TBL[n] || 0) * st.level;
+  const newCur        = pieceSpawn(st.nextTi);
+  const over          = collides(board.bits, getRots(newCur.ti, newCur.rot), newCur.x, newCur.y);
+  return {
+    ...st, board, cur: newCur, nextTi: randTet(),
+    score: newScore, lines: newLines, level: newLevel,
+    over, dropAcc: 0,
+  };
+};
+
+// Avance le temps : déclenche la chute automatique
+const actionTick = (st, dt) => {
+  if (!st.running || st.over) return st;
+  const interval = Math.max(50, 1000 - (st.level - 1) * 90);
+  const acc      = st.dropAcc + dt;
+  if (acc >= interval) return actionMoveDown({ ...st, dropAcc: acc - interval });
+  return { ...st, dropAcc: acc };
+};
+
+// ════════════════════════════════════════════════════════════════
+// INFRASTRUCTURE — Rendu Canvas
+// ════════════════════════════════════════════════════════════════
+
+const cvs  = document.getElementById('board');
+const ctx  = cvs.getContext('2d');
+const nCvs = document.getElementById('nc');
+const nCtx = nCvs.getContext('2d');
+
+cvs.width  = COLS * SZ;
+cvs.height = ROWS * SZ;
+
+// Dessine une cellule avec effet 3D (reflet + ombre)
+const drawCell = (cx, px, py, sz, cl, hi, sh) => {
+  cx.fillStyle = cl;
+  cx.fillRect(px + 1, py + 1, sz - 2, sz - 2);
+  cx.fillStyle = hi;
+  cx.fillRect(px + 1, py + 1, sz - 2, Math.ceil(sz * .22));
+  cx.fillStyle = sh;
+  cx.fillRect(px + 1, py + Math.floor(sz * .78), sz - 2, Math.ceil(sz * .22) - 1);
+};
+
+// Plateau + grille + cellules verrouillées
+const renderBoard = board => {
+  ctx.fillStyle = '#06060d';
+  ctx.fillRect(0, 0, cvs.width, cvs.height);
+  ctx.strokeStyle = '#0f0f28';
+  ctx.lineWidth = .5;
+  for (let c = 0; c <= COLS; c++) {
+    ctx.beginPath(); ctx.moveTo(c * SZ, 0); ctx.lineTo(c * SZ, ROWS * SZ); ctx.stroke();
+  }
+  for (let r = 0; r <= ROWS; r++) {
+    ctx.beginPath(); ctx.moveTo(0, r * SZ); ctx.lineTo(COLS * SZ, r * SZ); ctx.stroke();
+  }
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      const ti = board.cols[r][c] - 1;
+      if (ti >= 0) drawCell(ctx, c * SZ, r * SZ, SZ, TETS[ti].cl, TETS[ti].hi, TETS[ti].sh);
+    }
+};
+
+// Fantôme de chute (drop preview)
+const renderGhost = (bits, cur) => {
+  const rots = getRots(cur.ti, cur.rot);
+  const gy   = calcGhostY(bits, rots, cur.x, cur.y);
+  if (gy === cur.y) return;
+  const { cl } = TETS[cur.ti];
+  for (let r = 0; r < 4; r++) {
+    if (!rots[r]) continue;
+    for (let c = 0; c < 4; c++) {
+      if (rots[r] & (1 << c)) {
+        const bx = cur.x + c, by = gy + r;
+        if (by >= 0 && bx >= 0 && bx < COLS) {
+          ctx.globalAlpha = .16;
+          ctx.fillStyle   = cl;
+          ctx.fillRect(bx * SZ + 2, by * SZ + 2, SZ - 4, SZ - 4);
+          ctx.globalAlpha = .55;
+          ctx.strokeStyle = cl;
+          ctx.lineWidth   = 1.5;
+          ctx.strokeRect(bx * SZ + 2, by * SZ + 2, SZ - 4, SZ - 4);
+        }
+      }
+    }
+  }
+  ctx.globalAlpha = 1;
+};
+
+// Pièce courante
+const renderPiece = cur => {
+  const rots = getRots(cur.ti, cur.rot);
+  const t    = TETS[cur.ti];
+  for (let r = 0; r < 4; r++) {
+    if (!rots[r]) continue;
+    for (let c = 0; c < 4; c++) {
+      if (rots[r] & (1 << c)) {
+        const bx = cur.x + c, by = cur.y + r;
+        if (by >= 0 && bx >= 0 && bx < COLS)
+          drawCell(ctx, bx * SZ, by * SZ, SZ, t.cl, t.hi, t.sh);
+      }
+    }
+  }
+};
+
+// Aperçu pièce suivante (centré)
+const renderNext = ti => {
+  const nsz = 20;
+  nCtx.fillStyle = '#06060d';
+  nCtx.fillRect(0, 0, nCvs.width, nCvs.height);
+  const rots = TETS[ti].r[0];
+  const t    = TETS[ti];
+  let mc = 3, xc = 0, mr = 3, xr = 0;
+  for (let r = 0; r < 4; r++) {
+    if (!rots[r]) continue;
+    mr = Math.min(mr, r); xr = Math.max(xr, r);
+    for (let c = 0; c < 4; c++)
+      if (rots[r] & (1 << c)) { mc = Math.min(mc, c); xc = Math.max(xc, c); }
+  }
+  if (mc > xc) return;
+  const pw = (xc - mc + 1) * nsz, ph = (xr - mr + 1) * nsz;
+  const ox = Math.floor((nCvs.width  - pw) / 2);
+  const oy = Math.floor((nCvs.height - ph) / 2);
+  for (let r = 0; r < 4; r++) {
+    if (!rots[r]) continue;
+    for (let c = 0; c < 4; c++)
+      if (rots[r] & (1 << c))
+        drawCell(nCtx, ox + (c - mc) * nsz, oy + (r - mr) * nsz, nsz, t.cl, t.hi, t.sh);
+  }
+};
+
+// Mise à jour des compteurs HTML
+const renderUI = st => {
+  document.getElementById('sc').textContent = st.score;
+  document.getElementById('lv').textContent = st.level;
+  document.getElementById('ln').textContent = st.lines;
+  renderNext(st.nextTi);
+};
+
+// Rendu complet
+const render = st => {
+  renderBoard(st.board);
+  if (st.running && !st.over) {
+    renderGhost(st.board.bits, st.cur);
+    renderPiece(st.cur);
+  }
+  renderUI(st);
+};
+
+// ════════════════════════════════════════════════════════════════
+// INFRASTRUCTURE — Contrôles clavier & tactiles
+// ════════════════════════════════════════════════════════════════
+
+let state = stateInit();
+
+const ov     = document.getElementById('ov');
+const ovScore = document.getElementById('ov-sc');
+
+const showOverlay = (title, score, btnLabel) => {
+  ov.querySelector('h1').textContent     = title;
+  ovScore.textContent                     = score != null ? 'Score : ' + score : '';
+  document.getElementById('ov-btn').textContent = btnLabel;
+  ov.style.display = 'flex';
+};
+
+let lastT = 0;
+
+const startGame = () => {
+  state = { ...stateInit(), running: true };
+  ov.style.display = 'none';
+  lastT = 0;
+};
+
+// Dispatch d'une action (port entrant)
+const dispatch = action => {
+  if (!state.running) return;
+  switch (action) {
+    case 'L': state = actionMoveH(state, -1);     break;
+    case 'R': state = actionMoveH(state,  1);     break;
+    case 'D': state = actionMoveDown(state);       break;
+    case 'T': state = actionRotate(state);         break;
+    case 'X': state = actionHardDrop(state);       break;
+  }
+};
+
+// ─── Clavier avec DAS (Delayed Auto Shift) ────────────────────
+const DAS = 160, ARR = 50;
+const held = new Set();
+const dasMap = new Map();
+
+const dasStop = key => {
+  const d = dasMap.get(key);
+  if (!d) return;
+  if (d.t) clearTimeout(d.t);
+  if (d.i) clearInterval(d.i);
+  dasMap.delete(key);
+};
+
+const dasStart = (key, action) => {
+  const d = {};
+  d.t = setTimeout(() => {
+    d.t = null;
+    d.i = setInterval(() => dispatch(action), ARR);
+  }, DAS);
+  dasMap.set(key, d);
+};
+
+const KEY_MAP = {
+  ArrowLeft:'L', ArrowRight:'R', ArrowDown:'D',
+  ArrowUp:'T', x:'T', X:'T', z:'T', Z:'T',
+  ' ':'X', Enter:'START',
+};
+
+document.addEventListener('keydown', e => {
+  if (held.has(e.key)) return;
+  held.add(e.key);
+  const action = KEY_MAP[e.key];
+  if (!action) return;
+  e.preventDefault();
+  if (!state.running && (action === 'START' || action === 'X')) { startGame(); return; }
+  dispatch(action);
+  if (action === 'L' || action === 'R' || action === 'D') dasStart(e.key, action);
+});
+
+document.addEventListener('keyup', e => {
+  held.delete(e.key);
+  dasStop(e.key);
+});
+
+document.getElementById('ov-btn').addEventListener('click', startGame);
+
+// ─── Boutons tactiles avec répétition ─────────────────────────
+const bindTouch = (id, action, repeat = false) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('touchstart', e => {
+    e.preventDefault();
+    dispatch(action);
+    el.classList.add('on');
+    if (repeat) {
+      const d = {};
+      d.t = setTimeout(() => { d.t = null; d.i = setInterval(() => dispatch(action), ARR); }, DAS);
+      el._d = d;
+    }
+  }, { passive: false });
+  el.addEventListener('touchend', e => {
+    e.preventDefault();
+    el.classList.remove('on');
+    const d = el._d;
+    if (d) { if (d.t) clearTimeout(d.t); if (d.i) clearInterval(d.i); delete el._d; }
+  }, { passive: false });
+};
+
+bindTouch('t-l',   'L', true);
+bindTouch('t-r',   'R', true);
+bindTouch('t-sd',  'D', true);
+bindTouch('t-rot', 'T');
+bindTouch('t-drp', 'X');
+
+// ─── Swipe sur le plateau ─────────────────────────────────────
+let swX = 0, swY = 0, swT = 0;
+
+cvs.addEventListener('touchstart', e => {
+  e.preventDefault();
+  swX = e.touches[0].clientX;
+  swY = e.touches[0].clientY;
+  swT = Date.now();
+}, { passive: false });
+
+cvs.addEventListener('touchend', e => {
+  e.preventDefault();
+  const dx  = e.changedTouches[0].clientX - swX;
+  const dy  = e.changedTouches[0].clientY - swY;
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+  const elapsed = Date.now() - swT;
+  if (adx < 14 && ady < 14)      dispatch('T');             // tap = rotation
+  else if (adx > ady)             dispatch(dx > 0 ? 'R':'L'); // swipe horizontal
+  else if (dy > 0 && elapsed < 240) dispatch('X');           // swipe bas rapide = hard drop
+  else if (dy > 0)                dispatch('D');             // swipe bas lent = soft drop
+}, { passive: false });
+
+// ════════════════════════════════════════════════════════════════
+// MAIN — Boucle de jeu (composition root)
+// ════════════════════════════════════════════════════════════════
+
+const gameLoop = ts => {
+  if (!lastT) lastT = ts;
+  const dt = Math.min(ts - lastT, 200);  // cap delta à 200ms (onglet inactif)
+  lastT = ts;
+
+  state = actionTick(state, dt);
+  render(state);
+
+  // Détection game over
+  if (state.running && state.over) {
+    state = { ...state, running: false };
+    // Nettoyer les timers DAS
+    dasMap.forEach(d => { if (d.t) clearTimeout(d.t); if (d.i) clearInterval(d.i); });
+    dasMap.clear(); held.clear();
+    showOverlay('GAME OVER', state.score, 'REJOUER');
+  }
+
+  requestAnimationFrame(gameLoop);
+};
+
+// Initialisation
+render(state);
+showOverlay('TETRIS', null, 'JOUER');
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
