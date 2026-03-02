@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TodoList — Architecture Hexagonale</title>
+<style>
+/* ─── Reset & Base ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --p: #6366f1;
+  --p-dk: #4f46e5;
+  --acc: #8b5cf6;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --warn-bg: #fef9c3;
+  --warn-bd: #fde047;
+  --warn-tx: #854d0e;
+  --bg: #f1f5f9;
+  --surf: #ffffff;
+  --bd: #e2e8f0;
+  --tx: #1e293b;
+  --mut: #64748b;
+  --sh: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+  --sh-md: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -1px rgba(0,0,0,.06);
+  --sh-lg: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -2px rgba(0,0,0,.05);
+  --sh-xl: 0 20px 25px -5px rgba(0,0,0,.1), 0 10px 10px -5px rgba(0,0,0,.04);
+  --r: 12px;
+  --r-sm: 8px;
+  --tr: .2s ease;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--tx);
+  min-height: 100vh;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Layout ───────────────────────────────────────────────── */
+.app { max-width: 720px; margin: 0 auto; padding: 0 16px 100px; }
+
+/* ─── Header ───────────────────────────────────────────────── */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 28px 0 22px; flex-wrap: wrap; gap: 12px;
+}
+.header__title {
+  font-size: clamp(1.4rem, 5vw, 2rem);
+  font-weight: 900; letter-spacing: -.02em;
+  background: linear-gradient(135deg, var(--p) 0%, var(--acc) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.header__actions { display: flex; gap: 8px; }
+
+/* ─── Buttons ──────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 9px 18px; border: 1.5px solid transparent; border-radius: var(--r-sm);
+  cursor: pointer; font-size: .875rem; font-weight: 600; font-family: inherit;
+  line-height: 1; transition: all var(--tr); white-space: nowrap; outline: none;
+}
+.btn:focus-visible { outline: 2px solid var(--p); outline-offset: 2px; }
+
+.btn--primary {
+  background: linear-gradient(135deg, var(--p), var(--acc));
+  color: #fff; box-shadow: var(--sh);
+}
+.btn--primary:hover { transform: translateY(-1px); box-shadow: var(--sh-md); }
+.btn--primary:active { transform: none; }
+
+.btn--outline {
+  background: var(--surf); color: var(--tx); border-color: var(--bd);
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+}
+.btn--outline:hover { border-color: var(--p); color: var(--p); }
+
+.btn--danger { background: var(--danger); color: #fff; }
+.btn--danger:hover { opacity: .88; }
+
+/* ─── Form Card ────────────────────────────────────────────── */
+.form-card {
+  background: var(--surf); border-radius: var(--r);
+  padding: 20px; box-shadow: var(--sh); margin-bottom: 14px;
+}
+.form-card__label {
+  display: block; font-size: .75rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em;
+  color: var(--mut); margin-bottom: 14px;
+}
+.form-row { display: flex; gap: 10px; align-items: flex-start; }
+.field { flex: 1; display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.field:last-child { margin-bottom: 0; }
+
+.field__input {
+  width: 100%; padding: 10px 14px; border: 1.5px solid var(--bd);
+  border-radius: var(--r-sm); font-size: 1rem; color: var(--tx);
+  background: var(--surf); font-family: inherit;
+  transition: border-color var(--tr), box-shadow var(--tr); outline: none;
+}
+.field__input:focus {
+  border-color: var(--p); box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+}
+.field__input::placeholder { color: #adb5bd; }
+
+.field__textarea {
+  width: 100%; min-height: 100px; padding: 10px 14px;
+  border: 1.5px solid var(--bd); border-radius: var(--r-sm);
+  font-size: .875rem; font-family: monospace; color: var(--tx);
+  resize: vertical; outline: none;
+  transition: border-color var(--tr), box-shadow var(--tr);
+}
+.field__textarea:focus {
+  border-color: var(--p); box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+}
+
+.field__label { font-size: .8rem; font-weight: 600; color: var(--mut); }
+
+/* ─── Tabs ─────────────────────────────────────────────────── */
+.tabs {
+  display: flex; background: var(--surf); border-radius: var(--r);
+  padding: 4px; gap: 4px; box-shadow: var(--sh); margin-bottom: 14px;
+}
+.tab {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  gap: 6px; padding: 9px 8px; border: none; border-radius: calc(var(--r) - 4px);
+  cursor: pointer; font-size: .85rem; font-weight: 600; font-family: inherit;
+  color: var(--mut); background: transparent; transition: all var(--tr); outline: none;
+}
+.tab:focus-visible { outline: 2px solid var(--p); }
+.tab:hover:not(.tab--active) { background: var(--bg); color: var(--tx); }
+.tab--active {
+  background: linear-gradient(135deg, var(--p), var(--acc));
+  color: #fff; box-shadow: var(--sh);
+}
+.badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
+  font-size: .7rem; font-weight: 700;
+}
+.tab--active .badge { background: rgba(255,255,255,.28); }
+.tab:not(.tab--active) .badge { background: var(--bg); color: var(--mut); }
+
+/* ─── Task List ────────────────────────────────────────────── */
+.task-list { display: flex; flex-direction: column; gap: 8px; min-height: 1px; }
+
+/* ─── Task Item ────────────────────────────────────────────── */
+.task-item {
+  background: var(--surf); border-radius: var(--r); padding: 12px 14px;
+  box-shadow: var(--sh); display: flex; align-items: center; gap: 10px;
+  transition: box-shadow var(--tr), transform var(--tr), opacity var(--tr), border-color var(--tr);
+  border: 1.5px solid transparent; -webkit-user-select: none; user-select: none;
+}
+.task-item:hover { box-shadow: var(--sh-md); }
+
+.task-item--done { opacity: .6; }
+.task-item--done .task__title { text-decoration: line-through; color: var(--mut); }
+
+.task-item--dragging {
+  opacity: .22; border-style: dashed; border-color: var(--p); box-shadow: none;
+}
+.task-item--drop-target {
+  border-color: var(--p); box-shadow: 0 0 0 3px rgba(99,102,241,.22), var(--sh);
+  transform: scale(.99);
+}
+
+.task__handle {
+  color: var(--mut); cursor: grab; font-size: 1.1rem;
+  line-height: 1; padding: 4px 3px; flex-shrink: 0;
+  transition: color var(--tr); touch-action: none;
+}
+.task__handle:hover { color: var(--p); }
+.task__handle:active { cursor: grabbing; }
+
+.task__checkbox {
+  width: 20px; height: 20px; min-width: 20px; border-radius: 50%;
+  border: 2px solid var(--bd); appearance: none; -webkit-appearance: none;
+  cursor: pointer; flex-shrink: 0; transition: all var(--tr);
+  position: relative; background: #fff;
+}
+.task__checkbox:hover { border-color: var(--p); }
+.task__checkbox:checked {
+  background: linear-gradient(135deg, var(--p), var(--acc)); border-color: transparent;
+}
+.task__checkbox:checked::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") center/11px no-repeat;
+}
+.task__checkbox:focus-visible { outline: 2px solid var(--p); outline-offset: 2px; }
+
+.task__body { flex: 1; min-width: 0; }
+.task__title {
+  display: block; font-size: .9rem; font-weight: 500;
+  color: var(--tx); word-break: break-word; transition: color var(--tr);
+}
+.task__desc {
+  display: block; font-size: .78rem; color: var(--mut);
+  margin-top: 2px; word-break: break-word;
+}
+.task__meta {
+  display: block; font-size: .7rem; color: #94a3b8; margin-top: 3px;
+}
+
+.task__actions { display: flex; gap: 2px; flex-shrink: 0; }
+.task__btn {
+  width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 6px; cursor: pointer; font-size: .9rem;
+  color: var(--mut); background: transparent; transition: all var(--tr); outline: none;
+}
+.task__btn:hover { background: var(--bg); color: var(--tx); }
+.task__btn--del:hover { background: #fee2e2; color: var(--danger); }
+.task__btn:focus-visible { outline: 2px solid var(--p); }
+
+/* ─── Empty State ──────────────────────────────────────────── */
+.empty-state { text-align: center; padding: 60px 24px; color: var(--mut); }
+.empty-state__icon { font-size: 3.5rem; display: block; margin-bottom: 14px; }
+.empty-state__text { font-size: .95rem; font-weight: 500; }
+
+/* ─── Modal ────────────────────────────────────────────────── */
+.modal {
+  position: fixed; inset: 0;
+  background: rgba(15,23,42,.58); backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 16px;
+  opacity: 0; pointer-events: none; transition: opacity var(--tr);
+}
+.modal--open { opacity: 1; pointer-events: all; }
+.modal__box {
+  background: var(--surf); border-radius: var(--r); padding: 24px;
+  width: 100%; max-width: 460px; box-shadow: var(--sh-xl);
+  transform: scale(.94) translateY(12px);
+  transition: transform .28s cubic-bezier(.34,1.56,.64,1);
+}
+.modal--open .modal__box { transform: scale(1) translateY(0); }
+.modal__title {
+  font-size: 1.05rem; font-weight: 700; margin-bottom: 18px;
+  display: flex; align-items: center; gap: 8px;
+}
+.modal__sep { height: 1px; background: var(--bd); margin: 16px 0; }
+.modal__warn {
+  background: var(--warn-bg); border: 1.5px solid var(--warn-bd);
+  border-radius: var(--r-sm); padding: 12px 14px;
+  font-size: .85rem; color: var(--warn-tx); margin-bottom: 16px; line-height: 1.55;
+}
+.modal__actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+/* ─── Export Box ───────────────────────────────────────────── */
+.export-box {
+  background: var(--bg); border: 1px solid var(--bd); border-radius: var(--r-sm);
+  padding: 12px; font-family: monospace; font-size: .7rem; word-break: break-all;
+  max-height: 130px; overflow-y: auto; line-height: 1.55; color: var(--mut);
+  margin-bottom: 4px;
+}
+
+/* ─── Drag Ghost ───────────────────────────────────────────── */
+.drag-ghost {
+  position: fixed !important; pointer-events: none !important; z-index: 9999 !important;
+  box-shadow: var(--sh-xl) !important;
+  transform: rotate(1.8deg) scale(1.025) !important; opacity: .93 !important;
+  border-color: transparent !important;
+}
+
+/* ─── Toast ────────────────────────────────────────────────── */
+.toaster {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  z-index: 8000; display: flex; flex-direction: column;
+  align-items: center; gap: 8px; pointer-events: none;
+}
+.toast {
+  padding: 10px 22px; border-radius: 100px; font-size: .875rem; font-weight: 600;
+  box-shadow: var(--sh-lg); pointer-events: all;
+  animation: toastIn .3s cubic-bezier(.34,1.56,.64,1) forwards;
+}
+.toast--success { background: #dcfce7; color: #14532d; }
+.toast--error { background: #fee2e2; color: #7f1d1d; }
+.toast--info { background: #dbeafe; color: #1e3a8a; }
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(18px) scale(.88); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ─── Utils ────────────────────────────────────────────────── */
+.hidden { display: none !important; }
+.mt-10 { margin-top: 10px; }
+
+/* ─── Responsive ───────────────────────────────────────────── */
+@media (max-width: 540px) {
+  .header { padding: 18px 0 16px; }
+  .form-card { padding: 16px; }
+  .form-row { flex-direction: column; }
+  .btn { padding: 10px 14px; }
+  .tab { font-size: .78rem; padding: 8px 4px; gap: 5px; }
+  .badge { min-width: 18px; height: 18px; font-size: .65rem; padding: 0 4px; }
+  .task-item { padding: 10px 11px; gap: 8px; }
+  .task__handle { display: none; }
+  .modal__box { padding: 20px 16px; }
+  .toaster { width: calc(100% - 32px); }
+  .toast { width: 100%; text-align: center; border-radius: var(--r-sm); }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header class="header">
+    <h1 class="header__title">✅ TodoList</h1>
+    <div class="header__actions">
+      <button class="btn btn--outline" id="btn-export">⬆ Export</button>
+      <button class="btn btn--outline" id="btn-import">⬇ Import</button>
+    </div>
+  </header>
+
+  <!-- Add Form -->
+  <div class="form-card">
+    <span class="form-card__label">Nouvelle tâche</span>
+    <form id="form-add" novalidate>
+      <div class="field">
+        <input id="input-title" class="field__input" type="text"
+               placeholder="✏️ Titre de la tâche…" autocomplete="off" required>
+      </div>
+      <div class="form-row">
+        <div class="field" style="margin-bottom:0">
+          <input id="input-desc" class="field__input" type="text"
+                 placeholder="📝 Description (optionnel)…" autocomplete="off">
+        </div>
+        <button type="submit" class="btn btn--primary" style="flex-shrink:0">+ Ajouter</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="tabs" role="tablist">
+    <button class="tab tab--active" role="tab" data-tab="all" aria-selected="true">
+      Toutes <span class="badge" id="count-all">0</span>
+    </button>
+    <button class="tab" role="tab" data-tab="pending" aria-selected="false">
+      En cours <span class="badge" id="count-pending">0</span>
+    </button>
+    <button class="tab" role="tab" data-tab="done" aria-selected="false">
+      Terminées <span class="badge" id="count-done">0</span>
+    </button>
+  </div>
+
+  <!-- Task List -->
+  <div class="task-list" id="task-list" role="list"></div>
+
+  <!-- Empty State -->
+  <div class="empty-state hidden" id="empty-state" aria-live="polite">
+    <span class="empty-state__icon">📋</span>
+    <p class="empty-state__text">Aucune tâche ici pour le moment</p>
+  </div>
+
+</div>
+
+<!-- ── Modal : Édition ──────────────────────────────────────── -->
+<div class="modal" id="modal-edit" role="dialog" aria-modal="true" aria-labelledby="lbl-edit">
+  <div class="modal__box">
+    <h2 class="modal__title" id="lbl-edit">✏️ Modifier la tâche</h2>
+    <div class="field">
+      <label class="field__label" for="edit-title">Titre</label>
+      <input id="edit-title" class="field__input" type="text" placeholder="Titre…" autocomplete="off">
+    </div>
+    <div class="field mt-10">
+      <label class="field__label" for="edit-desc">Description</label>
+      <input id="edit-desc" class="field__input" type="text" placeholder="Description…" autocomplete="off">
+    </div>
+    <div class="modal__actions">
+      <button class="btn btn--outline" id="btn-edit-cancel">Annuler</button>
+      <button class="btn btn--primary" id="btn-edit-save">💾 Sauvegarder</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal : Export ───────────────────────────────────────── -->
+<div class="modal" id="modal-export" role="dialog" aria-modal="true" aria-labelledby="lbl-export">
+  <div class="modal__box">
+    <h2 class="modal__title" id="lbl-export">⬆️ Exporter les tâches</h2>
+    <p style="font-size:.875rem;color:var(--mut);margin-bottom:12px;">
+      Copiez ce code <strong>Base64</strong> pour sauvegarder ou transférer vos tâches.
+    </p>
+    <div class="export-box" id="export-data"></div>
+    <div class="modal__actions">
+      <button class="btn btn--outline" id="btn-export-close">Fermer</button>
+      <button class="btn btn--primary" id="btn-export-copy">📋 Copier</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal : Import ───────────────────────────────────────── -->
+<div class="modal" id="modal-import" role="dialog" aria-modal="true" aria-labelledby="lbl-import">
+  <div class="modal__box">
+    <h2 class="modal__title" id="lbl-import">⬇️ Importer des tâches</h2>
+    <div class="modal__warn">
+      ⚠️ <strong>Attention !</strong> L'import va <strong>effacer définitivement</strong>
+      toutes vos tâches actuelles et les remplacer par celles importées.
+      Cette action est <strong>irréversible</strong>.
+    </div>
+    <div class="field">
+      <label class="field__label" for="import-data">Code Base64</label>
+      <textarea id="import-data" class="field__textarea" placeholder="Collez votre code Base64 ici…"></textarea>
+    </div>
+    <div class="modal__actions">
+      <button class="btn btn--outline" id="btn-import-cancel">Annuler</button>
+      <button class="btn btn--danger" id="btn-import-confirm">⚠️ Confirmer l'import</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toaster" id="toaster" aria-live="assertive" aria-atomic="true"></div>
+
+<script>
+/*
+ ╔═══════════════════════════════════════════════════════════╗
+ ║ TODOLIST — ARCHITECTURE HEXAGONALE ║
+ ║ Programmation Fonctionnelle · Vanilla JS ║
+ ╠═══════════════════════════════════════════════════════════╣
+ ║ DOMAIN ──► APPLICATION (Use Cases) ──► ADAPTERS ║
+ ║ (logique (orchestration) (Storage, UI, B64) ║
+ ║ pure) ║
+ ╚═══════════════════════════════════════════════════════════╝
+*/
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════════
+   1. DOMAIN — Logique métier pure, sans effets de bord
+   ═══════════════════════════════════════════════════════════════ */
+
+const Domain = (() => {
+
+  const genId = () =>
+    `${Date.now().toString(36)}_${Math.random().toString(36).slice(2,9)}`;
+
+  /** Crée une tâche immuable */
+  const createTask = (title, description = '') => Object.freeze({
+    id: genId(),
+    title: title.trim(),
+    description: description.trim(),
+    status: 'pending', // 'pending' | 'done'
+    createdAt: new Date().toISOString()
+  });
+
+  /** Retourne une nouvelle tâche mise à jour (immutabilité) */
+  const patchTask = (task, patch) => Object.freeze({
+    ...task, ...patch, updatedAt: new Date().toISOString()
+  });
+
+  /** Bascule le statut d'une tâche */
+  const toggleStatus = (task) =>
+    patchTask(task, { status: task.status === 'done' ? 'pending' : 'done' });
+
+  /** Filtre les tâches par statut */
+  const filterTasks = (tasks, status) =>
+    status === 'all' ? tasks : tasks.filter(t => t.status === status);
+
+  /** Compte les tâches par statut */
+  const countTasks = (tasks, status) => filterTasks(tasks, status).length;
+
+  /** Réordonne les tâches : déplace fromId à la position de toId */
+  const reorderTasks = (tasks, fromId, toId) => {
+    const fi = tasks.findIndex(t => t.id === fromId);
+    const ti = tasks.findIndex(t => t.id === toId);
+    if (fi === -1 || ti === -1 || fi === ti) return tasks;
+    const next = [...tasks];
+    const [item] = next.splice(fi, 1);
+    next.splice(ti, 0, item);
+    return next;
+  };
+
+  return Object.freeze({
+    createTask, patchTask, toggleStatus, filterTasks, countTasks, reorderTasks
+  });
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════
+   2. PORTS — Contrats (interfaces documentées)
+   ═══════════════════════════════════════════════════════════════
+   @typedef StoragePort { save(tasks):bool, load():Task[], clear():void }
+   @typedef SerializerPort{ encode(tasks):string, decode(str):Task[] }
+   @typedef UINotifyPort { notify(msg, type):void }
+*/
+
+
+/* ═══════════════════════════════════════════════════════════════
+   3. ADAPTERS / INFRASTRUCTURE
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Adapter : LocalStorage (implémente StoragePort) ─────────── */
+const storageAdapter = (() => {
+  const KEY = 'hexatodo_v1';
+
+  const save = (tasks) => {
+    try { localStorage.setItem(KEY, JSON.stringify(tasks)); return true; }
+    catch (_) { return false; }
+  };
+
+  const load = () => {
+    try {
+      const raw = localStorage.getItem(KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (_) { return []; }
+  };
+
+  const clear = () => localStorage.removeItem(KEY);
+
+  return Object.freeze({ save, load, clear });
+})();
+
+
+/* ── Adapter : Base64 Serialisation (implémente SerializerPort) ─ */
+const serializerAdapter = (() => {
+
+  /** Encode un tableau en Base64 UTF-8 safe */
+  const encode = (data) => {
+    const json = JSON.stringify(data);
+    return btoa(
+      encodeURIComponent(json).replace(/%([0-9A-F]{2})/g,
+        (_, h) => String.fromCharCode(parseInt(h, 16)))
+    );
+  };
+
+  /** Décode un Base64 UTF-8 safe en tableau */
+  const decode = (b64) => {
+    const json = decodeURIComponent(
+      atob(b64.trim()).split('').map(c =>
+        '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+      ).join('')
+    );
+    return JSON.parse(json);
+  };
+
+  return Object.freeze({ encode, decode });
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════
+   4. APPLICATION — État centralisé + Use Cases
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── État global (mise à jour immutable) ────────────────────── */
+const appState = (() => {
+  let _s = { tasks: [], activeTab: 'all', editingId: null };
+  const get = () => ({ ..._s, tasks: [..._s.tasks] });
+  const set = (patch) => { _s = { ..._s, ...patch }; };
+  return Object.freeze({ get, set });
+})();
+
+
+/* ── Use Cases ──────────────────────────────────────────────── */
+const useCases = (() => {
+  const persist = (tasks) => storageAdapter.save(tasks);
+
+  /* ─ CRUD ─ */
+  const loadTasks = () => appState.set({ tasks: storageAdapter.load() });
+
+  const addTask = (title, description) => {
+    if (!title?.trim()) return false;
+    const next = [...appState.get().tasks, Domain.createTask(title, description)];
+    appState.set({ tasks: next });
+    persist(next);
+    return true;
+  };
+
+  const deleteTask = (id) => {
+    const next = appState.get().tasks.filter(t => t.id !== id);
+    appState.set({ tasks: next });
+    persist(next);
+  };
+
+  const toggleTask = (id) => {
+    const next = appState.get().tasks.map(t =>
+      t.id === id ? Domain.toggleStatus(t) : t
+    );
+    appState.set({ tasks: next });
+    persist(next);
+  };
+
+  const editTask = (id, title, description) => {
+    if (!title?.trim()) return false;
+    const next = appState.get().tasks.map(t =>
+      t.id === id ? Domain.patchTask(t, { title: title.trim(), description: description.trim() }) : t
+    );
+    appState.set({ tasks: next, editingId: null });
+    persist(next);
+    return true;
+  };
+
+  /* ─ Réordonnancement ─ */
+  const reorderTasks = (fromId, toId) => {
+    const next = Domain.reorderTasks(appState.get().tasks, fromId, toId);
+    appState.set({ tasks: next });
+    persist(next);
+  };
+
+  /* ─ Navigation ─ */
+  const setTab       = (tab) => appState.set({ activeTab: tab });
+  const startEditing = (id)  => appState.set({ editingId: id });
+  const stopEditing  = ()    => appState.set({ editingId: null });
+
+  /* ─ Export / Import ─ */
+  const exportTasks = () => serializerAdapter.encode(appState.get().tasks);
+
+  const importTasks = (b64) => {
+    try {
+      const tasks = serializerAdapter.decode(b64);
+      if (!Array.isArray(tasks)) return false;
+      // Validation légère des entrées
+      const valid = tasks.every(t => t && typeof t.id === 'string' && typeof t.title === 'string');
+      if (!valid) return false;
+      appState.set({ tasks });
+      persist(tasks);
+      return true;
+    } catch (_) { return false; }
+  };
+
+  return Object.freeze({
+    loadTasks, addTask, deleteTask, toggleTask, editTask, reorderTasks,
+    setTab, startEditing, stopEditing, exportTasks, importTasks
+  });
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════
+   5. UI ADAPTER — Rendu DOM
+   ═══════════════════════════════════════════════════════════════ */
+
+const ui = (() => {
+  const $   = (id) => document.getElementById(id);
+  const esc = (s)  => String(s ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  /* ── Toast ──────────────────────────────────────────────── */
+  const notify = (msg, type = 'info') => {
+    const el = document.createElement('div');
+    el.className = `toast toast--${type}`;
+    el.textContent = msg;
+    $('toaster').appendChild(el);
+    setTimeout(() => el.remove(), 3400);
+  };
+
+  /* ── Modals ─────────────────────────────────────────────── */
+  const openModal  = (id) => $(id)?.classList.add('modal--open');
+  const closeModal = (id) => $(id)?.classList.remove('modal--open');
+
+  /* ── Constructeur d'élément tâche ───────────────────────── */
+  const buildTaskEl = (task) => {
+    const el = document.createElement('div');
+    el.className = `task-item${task.status === 'done' ? ' task-item--done' : ''}`;
+    el.dataset.id = task.id;
+    el.setAttribute('role', 'listitem');
+
+    const date = new Date(task.createdAt).toLocaleDateString('fr-FR', {
+      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+    });
+
+    el.innerHTML = `
+      <span class="task__handle" title="Glisser pour réorganiser" aria-hidden="true">⠿</span>
+      <input type="checkbox" class="task__checkbox"
+        data-action="toggle" data-id="${esc(task.id)}"
+        ${task.status === 'done' ? 'checked' : ''}
+        aria-label="${task.status === 'done' ? 'Marquer en cours' : 'Marquer terminée'}"
+      >
+      <div class="task__body">
+        <span class="task__title">${esc(task.title)}</span>
+        ${task.description ? `<span class="task__desc">${esc(task.description)}</span>` : ''}
+        <span class="task__meta">📅 ${date}</span>
+      </div>
+      <div class="task__actions">
+        <button class="task__btn" data-action="edit" data-id="${esc(task.id)}"
+          title="Modifier" aria-label="Modifier la tâche">✏️</button>
+        <button class="task__btn task__btn--del" data-action="delete" data-id="${esc(task.id)}"
+          title="Supprimer" aria-label="Supprimer la tâche">🗑️</button>
+      </div>
+    `;
+    return el;
+  };
+
+  /* ── Rendu complet ──────────────────────────────────────── */
+  const render = () => {
+    const { tasks, activeTab } = appState.get();
+    const filtered = Domain.filterTasks(tasks, activeTab);
+    const list  = $('task-list');
+    const empty = $('empty-state');
+
+    list.innerHTML = '';
+
+    if (filtered.length === 0) {
+      empty.classList.remove('hidden');
+    } else {
+      empty.classList.add('hidden');
+      filtered.forEach(t => list.appendChild(buildTaskEl(t)));
+    }
+
+    $('count-all').textContent     = Domain.countTasks(tasks, 'all');
+    $('count-pending').textContent = Domain.countTasks(tasks, 'pending');
+    $('count-done').textContent    = Domain.countTasks(tasks, 'done');
+
+    document.querySelectorAll('.tab').forEach(btn => {
+      const active = btn.dataset.tab === activeTab;
+      btn.classList.toggle('tab--active', active);
+      btn.setAttribute('aria-selected', String(active));
+    });
+  };
+
+  return Object.freeze({ render, notify, openModal, closeModal });
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════
+   6. DRAG & DROP — Pointer Events API
+   ═══════════════════════════════════════════════════════════════ */
+
+const dnd = (() => {
+  let drag = null;
+
+  /* Nettoyage complet après un drag */
+  const cleanup = () => {
+    if (!drag) return;
+    drag.ghost.remove();
+    drag.srcEl.classList.remove('task-item--dragging');
+    document.querySelectorAll('.task-item--drop-target')
+            .forEach(el => el.classList.remove('task-item--drop-target'));
+    document.removeEventListener('pointermove',   onMove);
+    document.removeEventListener('pointerup',     onUp);
+    document.removeEventListener('pointercancel', cleanup);
+    drag = null;
+  };
+
+  const onDown = (e) => {
+    if (!e.target.closest('.task__handle')) return;
+    const srcEl = e.target.closest('.task-item');
+    if (!srcEl) return;
+
+    e.preventDefault();
+
+    const { left, top, width } = srcEl.getBoundingClientRect();
+
+    // Créer l'élément fantôme
+    const ghost = srcEl.cloneNode(true);
+    ghost.classList.add('drag-ghost');
+    ghost.style.width = width + 'px';
+    ghost.style.left  = left  + 'px';
+    ghost.style.top   = top   + 'px';
+    document.body.appendChild(ghost);
+
+    drag = {
+      id: srcEl.dataset.id,
+      srcEl, ghost,
+      ox: e.clientX - left,
+      oy: e.clientY - top
+    };
+
+    srcEl.classList.add('task-item--dragging');
+
+    document.addEventListener('pointermove',   onMove,   { passive: false });
+    document.addEventListener('pointerup',     onUp);
+    document.addEventListener('pointercancel', cleanup);
+  };
+
+  const onMove = (e) => {
+    if (!drag) return;
+    e.preventDefault();
+
+    // Déplacer le fantôme
+    drag.ghost.style.left = (e.clientX - drag.ox) + 'px';
+    drag.ghost.style.top  = (e.clientY - drag.oy) + 'px';
+
+    // Trouver l'élément sous le curseur (en masquant le fantôme)
+    drag.ghost.style.visibility = 'hidden';
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    drag.ghost.style.visibility = '';
+
+    document.querySelectorAll('.task-item--drop-target')
+            .forEach(el => el.classList.remove('task-item--drop-target'));
+
+    const target = under?.closest('.task-item');
+    if (target && target.dataset.id !== drag.id) {
+      target.classList.add('task-item--drop-target');
+    }
+  };
+
+  const onUp = (e) => {
+    if (!drag) return;
+
+    drag.ghost.style.visibility = 'hidden';
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    drag.ghost.style.visibility = '';
+
+    const target  = under?.closest('.task-item');
+    const fromId  = drag.id;
+
+    cleanup();
+
+    if (target && target.dataset.id !== fromId) {
+      useCases.reorderTasks(fromId, target.dataset.id);
+      ui.render();
+    }
+  };
+
+  const init = () => {
+    document.getElementById('task-list').addEventListener('pointerdown', onDown);
+  };
+
+  return Object.freeze({ init });
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════
+   7. CONTRÔLEUR — Câblage événements → Use Cases → UI
+   ═══════════════════════════════════════════════════════════════ */
+
+const controller = (() => {
+
+  /* ── Formulaire d'ajout ─────────────────────────────────── */
+  const bindAddForm = () => {
+    document.getElementById('form-add').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const title = document.getElementById('input-title').value;
+      const desc  = document.getElementById('input-desc').value;
+      if (useCases.addTask(title, desc)) {
+        e.target.reset();
+        document.getElementById('input-title').focus();
+        ui.render();
+        ui.notify('Tâche ajoutée !', 'success');
+      } else {
+        ui.notify('Le titre est requis', 'error');
+      }
+    });
+  };
+
+  /* ── Délégation d'événements sur la liste ───────────────── */
+  const bindTaskList = () => {
+    document.getElementById('task-list').addEventListener('click', (e) => {
+      const el = e.target.closest('[data-action]');
+      if (!el) return;
+      const { action, id } = el.dataset;
+
+      if (action === 'toggle') {
+        useCases.toggleTask(id);
+        ui.render();
+        return;
+      }
+      if (action === 'delete') {
+        useCases.deleteTask(id);
+        ui.render();
+        ui.notify('Tâche supprimée', 'info');
+        return;
+      }
+      if (action === 'edit') {
+        const task = appState.get().tasks.find(t => t.id === id);
+        if (!task) return;
+        document.getElementById('edit-title').value = task.title;
+        document.getElementById('edit-desc').value  = task.description;
+        useCases.startEditing(id);
+        ui.openModal('modal-edit');
+      }
+    });
+  };
+
+  /* ── Onglets ────────────────────────────────────────────── */
+  const bindTabs = () => {
+    document.getElementById('tabs').addEventListener('click', (e) => {
+      const tab = e.target.closest('[data-tab]');
+      if (!tab) return;
+      useCases.setTab(tab.dataset.tab);
+      ui.render();
+    });
+  };
+
+  /* ── Modal édition ──────────────────────────────────────── */
+  const bindEditModal = () => {
+    const save = () => {
+      const id    = appState.get().editingId;
+      const title = document.getElementById('edit-title').value;
+      const desc  = document.getElementById('edit-desc').value;
+      if (!id) return;
+      if (useCases.editTask(id, title, desc)) {
+        ui.closeModal('modal-edit');
+        ui.render();
+        ui.notify('Tâche modifiée !', 'success');
+      } else {
+        ui.notify('Le titre ne peut pas être vide', 'error');
+      }
+    };
+
+    document.getElementById('btn-edit-save').addEventListener('click', save);
+
+    document.getElementById('btn-edit-cancel').addEventListener('click', () => {
+      useCases.stopEditing();
+      ui.closeModal('modal-edit');
+    });
+
+    document.getElementById('edit-title').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter')  { e.preventDefault(); save(); }
+      if (e.key === 'Escape') ui.closeModal('modal-edit');
+    });
+
+    document.getElementById('modal-edit').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) ui.closeModal('modal-edit');
+    });
+  };
+
+  /* ── Export ─────────────────────────────────────────────── */
+  const bindExport = () => {
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const b64 = useCases.exportTasks();
+      document.getElementById('export-data').textContent =
+        b64 || '(aucune tâche à exporter)';
+      ui.openModal('modal-export');
+    });
+
+    document.getElementById('btn-export-copy').addEventListener('click', () => {
+      const txt = document.getElementById('export-data').textContent;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(txt)
+          .then(()  => ui.notify('Copié dans le presse-papier !', 'success'))
+          .catch(()  => fallbackSelect());
+      } else { fallbackSelect(); }
+    });
+
+    const fallbackSelect = () => {
+      const box   = document.getElementById('export-data');
+      const range = document.createRange();
+      range.selectNodeContents(box);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      ui.notify('Sélectionné — utilisez Ctrl+C / ⌘C', 'info');
+    };
+
+    document.getElementById('btn-export-close').addEventListener('click', () =>
+      ui.closeModal('modal-export')
+    );
+    document.getElementById('modal-export').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) ui.closeModal('modal-export');
+    });
+  };
+
+  /* ── Import ─────────────────────────────────────────────── */
+  const bindImport = () => {
+    document.getElementById('btn-import').addEventListener('click', () => {
+      document.getElementById('import-data').value = '';
+      ui.openModal('modal-import');
+    });
+
+    document.getElementById('btn-import-confirm').addEventListener('click', () => {
+      const b64 = document.getElementById('import-data').value.trim();
+      if (!b64) {
+        ui.notify('Veuillez coller un code Base64 valide', 'error');
+        return;
+      }
+      if (useCases.importTasks(b64)) {
+        ui.closeModal('modal-import');
+        ui.render();
+        ui.notify('✅ Tâches importées avec succès !', 'success');
+      } else {
+        ui.notify('❌ Code invalide ou format corrompu', 'error');
+      }
+    });
+
+    document.getElementById('btn-import-cancel').addEventListener('click', () =>
+      ui.closeModal('modal-import')
+    );
+    document.getElementById('modal-import').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) ui.closeModal('modal-import');
+    });
+  };
+
+  const init = () => {
+    bindAddForm();
+    bindTaskList();
+    bindTabs();
+    bindEditModal();
+    bindExport();
+    bindImport();
+  };
+
+  return Object.freeze({ init });
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════
+   8. BOOTSTRAP — Point d'entrée
+   ═══════════════════════════════════════════════════════════════ */
+
+document.addEventListener('DOMContentLoaded', () => {
+  useCases.loadTasks();
+  ui.render();
+  dnd.init();
+  controller.init();
+});
+</script>
+</body>
+</html>
