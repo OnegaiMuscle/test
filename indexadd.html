@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📅 Agenda</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary: #4f46e5;
+      --primary-h: #4338ca;
+      --primary-light: #ede9fe;
+      --bg: #f1f5f9;
+      --surface: #ffffff;
+      --surface-2: #f8fafc;
+      --border: #e2e8f0;
+      --border-l: #f1f5f9;
+      --text: #0f172a;
+      --text-2: #475569;
+      --text-3: #94a3b8;
+      --danger: #dc2626;
+      --danger-l: #fef2f2;
+      --success: #059669;
+      --warning: #d97706;
+      --info: #3b82f6;
+      --sh-xs: 0 1px 2px rgba(0,0,0,.05);
+      --sh-sm: 0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+      --sh: 0 4px 6px rgba(0,0,0,.07),0 2px 4px rgba(0,0,0,.04);
+      --sh-md: 0 10px 15px rgba(0,0,0,.1),0 4px 6px rgba(0,0,0,.05);
+      --sh-lg: 0 20px 25px rgba(0,0,0,.1),0 8px 10px rgba(0,0,0,.04);
+      --r-sm: 6px;
+      --r: 10px;
+      --r-lg: 14px;
+      --r-xl: 20px;
+      --ease: 150ms ease;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── HEADER ─────────────────────────────────────────── */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      flex-shrink: 0;
+      box-shadow: var(--sh-xs);
+      z-index: 50;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 17px;
+      font-weight: 700;
+      user-select: none;
+    }
+    .brand-icon {
+      width: 32px; height: 32px;
+      background: var(--primary);
+      border-radius: var(--r);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .hdr-actions { display: flex; align-items: center; gap: 8px; }
+
+    /* ── BUTTONS ─────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 7px 13px;
+      border-radius: var(--r-sm);
+      font-size: 12.5px; font-weight: 500;
+      cursor: pointer; border: none;
+      transition: background var(--ease), transform 80ms;
+      font-family: var(--font);
+      white-space: nowrap; outline: none;
+    }
+    .btn:active { transform: scale(.96); }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-h); }
+    .btn-secondary { background: var(--border-l); color: var(--text); }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-ghost { background: transparent; color: var(--text-2); }
+    .btn-ghost:hover { background: var(--border-l); }
+    .btn-danger { background: var(--danger-l); color: var(--danger); }
+    .btn-danger:hover { background: #fee2e2; }
+    .btn-icon { padding: 7px; }
+
+    /* ── LAYOUT ──────────────────────────────────────────── */
+    .body {
+      display: flex; flex: 1; overflow: hidden;
+      height: calc(100vh - 58px);
+    }
+
+    /* ── SIDEBAR ─────────────────────────────────────────── */
+    .sidebar {
+      width: 252px; flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .sb-block {
+      padding: 16px;
+      border-bottom: 1px solid var(--border-l);
+    }
+    .sb-block-grow { flex: 1; overflow-y: auto; }
+    .sb-label {
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1px;
+      color: var(--text-3); margin-bottom: 10px;
+    }
+
+    /* ── MINI CAL ────────────────────────────────────────── */
+    .mc-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .mc-title { font-size: 13px; font-weight: 600; }
+    .mc-btns { display: flex; gap: 2px; }
+    .mc-btn {
+      width: 26px; height: 26px; border: none; background: transparent;
+      border-radius: var(--r-sm); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-2); font-size: 13px;
+      transition: background var(--ease);
+    }
+    .mc-btn:hover { background: var(--border-l); }
+    .mc-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 1px; }
+    .mc-dn {
+      text-align: center; font-size: 10px;
+      font-weight: 600; color: var(--text-3); padding: 3px 0;
+    }
+    .mc-d {
+      aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+      font-size: 11px; border-radius: 50%; cursor: pointer;
+      color: var(--text); transition: background var(--ease); position: relative;
+    }
+    .mc-d:hover { background: var(--border-l); }
+    .mc-d.out { color: var(--text-3); }
+    .mc-d.today { background: var(--primary-light); color: var(--primary); font-weight: 700; }
+    .mc-d.sel { background: var(--primary) !important; color: #fff !important; font-weight: 700; }
+    .mc-d.has::after {
+      content: ''; position: absolute; bottom: 1px; left: 50%; transform: translateX(-50%);
+      width: 3px; height: 3px; border-radius: 50%; background: var(--primary);
+    }
+    .mc-d.sel::after { background: rgba(255,255,255,.65); }
+
+    /* ── UPCOMING ────────────────────────────────────────── */
+    .upc {
+      display: flex; align-items: flex-start; gap: 9px;
+      padding: 7px 5px; border-radius: var(--r-sm); cursor: pointer;
+      transition: background var(--ease);
+    }
+    .upc:hover { background: var(--border-l); }
+    .upc-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+    .upc-body { flex: 1; min-width: 0; }
+    .upc-title {
+      font-size: 12px; font-weight: 500;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .upc-time { font-size: 11px; color: var(--text-3); margin-top: 1px; }
+
+    /* ── CAL ZONE ────────────────────────────────────────── */
+    .cal-zone { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    .toolbar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 10px 18px; display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+    }
+    .cal-title {
+      font-size: 17px; font-weight: 700; flex: 1; text-align: center;
+    }
+    .view-sw { display: flex; background: var(--border-l); border-radius: var(--r-sm); padding: 3px; }
+    .view-sw-btn {
+      padding: 4px 11px; border: none; border-radius: 4px;
+      font-size: 12px; font-weight: 500; cursor: pointer;
+      background: transparent; color: var(--text-2);
+      transition: all var(--ease); font-family: var(--font);
+    }
+    .view-sw-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--sh-xs); }
+
+    /* ── CAL CONTENT ─────────────────────────────────────── */
+    #cal-content {
+      flex: 1; overflow-y: auto; padding: 14px;
+      display: flex; flex-direction: column;
+    }
+    #cal-content[data-view="week"] { padding: 0; overflow: hidden; }
+
+    /* ── MONTH VIEW ──────────────────────────────────────── */
+    .month-grid {
+      background: var(--surface); border-radius: var(--r-lg);
+      border: 1px solid var(--border); overflow: hidden;
+      box-shadow: var(--sh-sm); flex: 1;
+    }
+    .month-dn-row { display: grid; grid-template-columns: repeat(7,1fr); border-bottom: 1px solid var(--border); }
+    .month-dn { padding: 9px 6px; text-align: center; font-size: 10.5px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .4px; }
+    .month-days { display: grid; grid-template-columns: repeat(7,1fr); }
+    .mday {
+      border-right: 1px solid var(--border-l); border-bottom: 1px solid var(--border-l);
+      min-height: 110px; padding: 6px; cursor: pointer;
+      transition: background var(--ease);
+    }
+    .mday:nth-child(7n) { border-right: none; }
+    .mday:hover { background: #f9f8ff; }
+    .mday.out { background: var(--surface-2); opacity: .65; }
+    .mday.today .day-n { background: var(--primary); color: #fff; font-weight: 700; }
+    .mday.sel { background: #f5f3ff; }
+    .day-n {
+      width: 25px; height: 25px; display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 500; border-radius: 50%;
+      color: var(--text); margin-bottom: 3px;
+    }
+    .mday.out .day-n { color: var(--text-3); }
+    .day-chips { display: flex; flex-direction: column; gap: 2px; }
+    .ev-chip {
+      padding: 2px 5px; border-radius: 3px; font-size: 10px; font-weight: 500;
+      color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      cursor: pointer; transition: opacity var(--ease);
+    }
+    .ev-chip:hover { opacity: .8; }
+    .more-chip { font-size: 10px; color: var(--text-3); font-weight: 500; padding: 1px 3px; cursor: pointer; }
+    .more-chip:hover { color: var(--primary); }
+
+    /* ── WEEK VIEW ───────────────────────────────────────── */
+    .week-wrap {
+      flex: 1; display: flex; flex-direction: column;
+      margin: 14px; background: var(--surface);
+      border-radius: var(--r-lg); border: 1px solid var(--border);
+      box-shadow: var(--sh-sm); overflow: hidden;
+    }
+    .week-hdr {
+      display: grid; grid-template-columns: 50px repeat(7,1fr);
+      border-bottom: 2px solid var(--border); flex-shrink: 0;
+    }
+    .wh-time { border-right: 1px solid var(--border-l); }
+    .wh-day { padding: 8px 4px; text-align: center; border-left: 1px solid var(--border-l); }
+    .wh-name { font-size: 10.5px; font-weight: 600; text-transform: uppercase; color: var(--text-3); letter-spacing: .4px; }
+    .wh-num {
+      width: 32px; height: 32px; margin: 3px auto 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 700; border-radius: 50%;
+      cursor: pointer; transition: background var(--ease), color var(--ease);
+    }
+    .wh-num:hover { background: var(--border-l); }
+    .wh-num.today-n { background: var(--primary); color: #fff; }
+    .week-body {
+      flex: 1; overflow-y: auto;
+      display: grid; grid-template-columns: 50px repeat(7,1fr);
+    }
+    .w-time-col { border-right: 1px solid var(--border-l); }
+    .w-hour-lbl {
+      height: 54px; display: flex; align-items: flex-start;
+      padding: 3px 5px 0; font-size: 10px; color: var(--text-3); font-weight: 500;
+      border-bottom: 1px solid var(--border-l);
+    }
+    .w-day-col { position: relative; border-left: 1px solid var(--border-l); }
+    .w-hour-cell { height: 54px; border-bottom: 1px solid var(--border-l); }
+    .w-half { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--border-l); pointer-events: none; }
+    .w-ev {
+      position: absolute; left: 2px; right: 2px; border-radius: var(--r-sm);
+      padding: 3px 5px; font-size: 11px; font-weight: 600; color: #fff;
+      overflow: hidden; cursor: pointer; z-index: 2;
+      transition: opacity var(--ease), box-shadow var(--ease);
+    }
+    .w-ev:hover { opacity: .85; box-shadow: var(--sh); }
+    .w-ev-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .w-ev-s { font-size: 9px; opacity: .8; font-weight: 400; }
+    .now-line { position: absolute; left: 0; right: 0; height: 2px; background: #ef4444; z-index: 3; pointer-events: none; }
+    .now-dot { position: absolute; left: -5px; top: -5px; width: 12px; height: 12px; border-radius: 50%; background: #ef4444; }
+
+    /* ── DAY PANEL ───────────────────────────────────────── */
+    .day-panel {
+      width: 290px; flex-shrink: 0;
+      background: var(--surface); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .dp-hdr {
+      padding: 16px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-start; justify-content: space-between;
+    }
+    .dp-date { font-size: 13px; font-weight: 700; text-transform: capitalize; }
+    .dp-count { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+    .dp-list { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .dp-card {
+      border-radius: var(--r); padding: 10px 12px;
+      background: var(--surface-2); border-left: 3px solid;
+      cursor: pointer; transition: box-shadow var(--ease), transform var(--ease);
+    }
+    .dp-card:hover { box-shadow: var(--sh); transform: translateY(-1px); }
+    .dp-card-title { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+    .dp-card-time { font-size: 11px; color: var(--text-2); display: flex; align-items: center; gap: 4px; }
+    .dp-card-desc {
+      font-size: 11px; color: var(--text-3); margin-top: 5px; line-height: 1.4;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .dp-card-acts { display: flex; gap: 5px; margin-top: 7px; }
+    .empty {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      flex: 1; color: var(--text-3); text-align: center; gap: 5px;
+    }
+    .empty-ico { font-size: 34px; opacity: .35; }
+    .empty-txt { font-size: 13px; font-weight: 500; }
+    .empty-sub { font-size: 11px; }
+
+    /* ── MODAL ───────────────────────────────────────────── */
+    .overlay {
+      position: fixed; inset: 0;
+      background: rgba(15,23,42,.55);
+      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200; padding: 16px;
+      opacity: 0; pointer-events: none;
+      transition: opacity 200ms ease;
+    }
+    .overlay.open { opacity: 1; pointer-events: all; }
+    .modal {
+      background: var(--surface); border-radius: var(--r-xl);
+      width: 100%; max-width: 450px; box-shadow: var(--sh-lg);
+      transform: scale(.93) translateY(14px);
+      transition: transform 260ms cubic-bezier(.34,1.56,.64,1);
+    }
+    .overlay.open .modal { transform: scale(1) translateY(0); }
+    .modal-hdr {
+      padding: 20px 20px 0;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-title { font-size: 16px; font-weight: 700; }
+    .modal-x {
+      width: 29px; height: 29px; border: none; border-radius: var(--r-sm);
+      background: var(--border-l); cursor: pointer; display: flex;
+      align-items: center; justify-content: center;
+      color: var(--text-2); font-size: 13px;
+      transition: background var(--ease); font-family: var(--font);
+    }
+    .modal-x:hover { background: var(--border); }
+    .modal-body { padding: 16px 20px 20px; }
+
+    /* ── FORM ────────────────────────────────────────────── */
+    .fg { margin-bottom: 12px; }
+    .fl { display: block; font-size: 11.5px; font-weight: 500; color: var(--text-2); margin-bottom: 5px; }
+    .fi {
+      width: 100%; padding: 8px 10px;
+      border: 1.5px solid var(--border); border-radius: var(--r-sm);
+      font-size: 13px; color: var(--text); background: var(--surface);
+      outline: none; transition: border-color var(--ease), box-shadow var(--ease);
+      font-family: var(--font);
+    }
+    .fi:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.1); }
+    .fi-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .cp-row { display: flex; gap: 7px; flex-wrap: wrap; }
+    .cp-sw {
+      width: 25px; height: 25px; border-radius: 50%; cursor: pointer;
+      border: 2.5px solid transparent; outline: 2px solid transparent;
+      transition: transform var(--ease), outline-color var(--ease);
+    }
+    .cp-sw:hover { transform: scale(1.15); }
+    .cp-sw.sel { outline-color: var(--text); outline-offset: 2px; }
+    .modal-footer {
+      display: flex; gap: 7px; justify-content: flex-end;
+      margin-top: 18px; padding-top: 14px;
+      border-top: 1px solid var(--border-l);
+    }
+
+    /* ── BASE64 AREA ─────────────────────────────────────── */
+    .b64 {
+      width: 100%; padding: 9px 10px;
+      border: 1.5px solid var(--border); border-radius: var(--r-sm);
+      font-size: 10.5px; font-family: 'Courier New', monospace;
+      color: var(--text); background: var(--surface-2);
+      resize: vertical; min-height: 88px; outline: none;
+      transition: border-color var(--ease), box-shadow var(--ease);
+    }
+    .b64:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.1); }
+
+    /* ── TOASTS ──────────────────────────────────────────── */
+    .toast-wrap { position: fixed; bottom: 18px; right: 18px; z-index: 500; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+    .toast {
+      padding: 10px 13px; border-radius: var(--r); font-size: 12.5px; font-weight: 500;
+      color: #fff; box-shadow: var(--sh-md); display: flex; align-items: center; gap: 6px;
+      animation: toastIn 250ms cubic-bezier(.34,1.56,.64,1) both, toastOut 250ms ease 2.6s both;
+    }
+    .toast.success { background: var(--success); }
+    .toast.error { background: var(--danger); }
+    .toast.info { background: var(--info); }
+    @keyframes toastIn { from { opacity:0; transform:translateX(16px) scale(.9); } to { opacity:1; transform:none; } }
+    @keyframes toastOut { to { opacity:0; transform:translateX(16px) scale(.9); } }
+
+    /* ── SCROLLBAR ───────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+    /* ── RESPONSIVE ──────────────────────────────────────── */
+    @media (max-width: 1024px) { .sidebar { width: 220px; } .day-panel { width: 255px; } }
+    @media (max-width: 860px) { .sidebar { display: none; } }
+    @media (max-width: 660px) { .day-panel { display: none; } .mday { min-height: 72px; } }
+    @media (max-width: 480px) { .header { padding: 0 12px; } .toolbar { padding: 8px 12px; } }
+  </style>
+</head>
+<body>
+
+<!-- ── HEADER ──────────────────────────────────────────── -->
+<header class="header">
+  <div class="brand">
+    <div class="brand-icon">📅</div>
+    Agenda
+  </div>
+  <div class="hdr-actions">
+    <button class="btn btn-ghost" id="btn-import">⬇ Import</button>
+    <button class="btn btn-ghost" id="btn-export">⬆ Export</button>
+    <button class="btn btn-primary" id="btn-add">＋ Nouveau</button>
+  </div>
+</header>
+
+<!-- ── BODY ────────────────────────────────────────────── -->
+<div class="body">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sb-block">
+      <div id="mini-cal"></div>
+    </div>
+    <div class="sb-block sb-block-grow">
+      <div class="sb-label">À venir</div>
+      <div id="upcoming"></div>
+    </div>
+  </aside>
+
+  <!-- CAL ZONE -->
+  <div class="cal-zone">
+    <div class="toolbar">
+      <button class="btn btn-ghost btn-icon" id="btn-prev">←</button>
+      <button class="btn btn-secondary" id="btn-today" style="font-size:12px;padding:5px 10px">Aujourd'hui</button>
+      <button class="btn btn-ghost btn-icon" id="btn-next">→</button>
+      <span class="cal-title" id="cal-title"></span>
+      <div class="view-sw">
+        <button class="view-sw-btn active" data-view="month">Mois</button>
+        <button class="view-sw-btn" data-view="week">Semaine</button>
+      </div>
+    </div>
+    <div id="cal-content" data-view="month"></div>
+  </div>
+
+
+  <!-- DAY PANEL -->
+  <aside class="day-panel">
+    <div class="dp-hdr">
+      <div>
+        <div class="dp-date" id="dp-date">—</div>
+        <div class="dp-count" id="dp-count"></div>
+      </div>
+      <button class="btn btn-primary btn-icon" id="btn-add-dp" style="font-size:16px">＋</button>
+    </div>
+    <div class="dp-list" id="dp-list"></div>
+  </aside>
+</div>
+
+<!-- MODAL: RENDEZ-VOUS ─────────────────────────────────── -->
+<div class="overlay" id="modal-appt">
+  <div class="modal">
+    <div class="modal-hdr">
+      <span class="modal-title" id="modal-appt-title">Nouveau rendez-vous</span>
+      <button class="modal-x" data-close="modal-appt">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="fg">
+        <label class="fl">Titre *</label>
+        <input class="fi" type="text" id="f-title" placeholder="Ex : Réunion projet, Dentiste…">
+      </div>
+      <div class="fg">
+        <label class="fl">Date *</label>
+        <input class="fi" type="date" id="f-date">
+      </div>
+      <div class="fi-row fg">
+        <div><label class="fl">Début</label><input class="fi" type="time" id="f-start"></div>
+        <div><label class="fl">Fin</label><input class="fi" type="time" id="f-end"></div>
+      </div>
+      <div class="fg">
+        <label class="fl">Description</label>
+        <textarea class="fi" id="f-desc" rows="2" placeholder="Notes, lieu…"></textarea>
+      </div>
+      <div class="fg">
+        <label class="fl">Couleur</label>
+        <div class="cp-row" id="cp"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modal-appt">Annuler</button>
+        <button class="btn btn-danger" id="btn-del" style="display:none">🗑 Supprimer</button>
+        <button class="btn btn-primary" id="btn-save">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: EXPORT ──────────────────────────────────────── -->
+<div class="overlay" id="modal-export">
+  <div class="modal">
+    <div class="modal-hdr">
+      <span class="modal-title">Exporter — Base64</span>
+      <button class="modal-x" data-close="modal-export">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-2);margin-bottom:10px">Copiez ce code pour sauvegarder vos données :</p>
+      <textarea class="b64" id="exp-val" readonly></textarea>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modal-export">Fermer</button>
+        <button class="btn btn-primary" id="btn-copy">📋 Copier</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: IMPORT ──────────────────────────────────────── -->
+<div class="overlay" id="modal-import">
+  <div class="modal">
+    <div class="modal-hdr">
+      <span class="modal-title">Importer — Base64</span>
+      <button class="modal-x" data-close="modal-import">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-2);margin-bottom:10px">Collez votre code base64 :</p>
+      <textarea class="b64" id="imp-val" placeholder="Collez ici…"></textarea>
+      <p style="font-size:11px;color:var(--warning);margin-top:8px">⚠ L'import remplace tous les rendez-vous existants.</p>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modal-import">Annuler</button>
+        <button class="btn btn-primary" id="btn-imp-ok">⬇ Importer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOASTS -->
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════
+   COUCHE DOMAINE — Fonctions pures, zéro effet de bord
+   ═══════════════════════════════════════════════════════════ */
+const domain = (() => {
+
+  const COLORS = [
+    '#4f46e5','#7c3aed','#db2777','#dc2626',
+    '#ea580c','#d97706','#16a34a','#0284c7',
+    '#0891b2','#0f766e'
+  ];
+
+  const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin',
+                  'Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+  const DAYS = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+
+  // ── Pures ──────────────────────────────────────────────
+
+  const toDateStr = d => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const j = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${j}`;
+  };
+
+  const todayStr = () => toDateStr(new Date());
+
+  const makeAppointment = ({ title, date, startTime = '', endTime = '', description = '', color = COLORS[0] }) => ({
+    id: crypto.randomUUID(),
+    title: title.trim(),
+    date,
+    startTime,
+    endTime,
+    description: description.trim(),
+    color,
+    createdAt: new Date().toISOString()
+  });
+
+  const patchAppointment = (appt, patch) => ({
+    ...appt,
+    ...patch,
+    id: appt.id,
+    createdAt: appt.createdAt,
+    updatedAt: new Date().toISOString()
+  });
+
+  const validate = ({ title, date }) => {
+    const errs = [];
+    if (!title?.trim()) errs.push('Le titre est requis');
+    if (!date) errs.push('La date est requise');
+    return errs;
+  };
+
+  const forDate = (appts, dateStr) =>
+    [...appts]
+      .filter(a => a.date === dateStr)
+      .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+
+  const upcoming = (appts, n = 8) => {
+    const today = todayStr();
+    return [...appts]
+      .filter(a => a.date >= today)
+      .sort((a, b) => a.date.localeCompare(b.date) || (a.startTime || '').localeCompare(b.startTime || ''))
+      .slice(0, n);
+  };
+
+  const fmtTime = (s, e) => {
+    if (!s && !e) return 'Toute la journée';
+    return e ? `${s} – ${e}` : s;
+  };
+
+  const fmtShort = dateStr => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    const t = new Date(); t.setHours(0,0,0,0);
+    const tm = new Date(t); tm.setDate(t.getDate() + 1);
+    if (+dt === +t) return "Aujourd'hui";
+    if (+dt === +tm) return 'Demain';
+    return dt.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  };
+
+  const fmtFull = dateStr => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d)
+      .toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  };
+
+  // Construit la grille d'un mois (padding lun-dim inclus)
+  const buildMonthGrid = (year, month, maxSlots = 42) => {
+    const first = new Date(year, month, 1);
+    const last = new Date(year, month + 1, 0);
+    let dow = first.getDay(); // 0=dim
+    dow = dow === 0 ? 6 : dow - 1; // lun=0
+
+    const days = [];
+    for (let i = dow - 1; i >= 0; i--) {
+      const d = new Date(year, month, -i);
+      days.push({ str: toDateStr(d), n: d.getDate(), cur: false });
+    }
+    for (let d = 1; d <= last.getDate(); d++) {
+      const dt = new Date(year, month, d);
+      days.push({ str: toDateStr(dt), n: d, cur: true });
+    }
+    let nx = 1;
+    const stop = maxSlots > 0
+      ? () => days.length < maxSlots
+      : () => days.length % 7 !== 0;
+    while (stop()) {
+      const d = new Date(year, month + 1, nx++);
+      days.push({ str: toDateStr(d), n: d.getDate(), cur: false });
+    }
+    return days;
+  };
+
+  return { COLORS, MONTHS, DAYS, toDateStr, todayStr, makeAppointment,
+           patchAppointment, validate, forDate, upcoming,
+           fmtTime, fmtShort, fmtFull, buildMonthGrid };
+})();
+
+
+/* ═══════════════════════════════════════════════════════════
+   INFRASTRUCTURE — Adaptateurs (Ports d'infrastructure)
+   ═══════════════════════════════════════════════════════════ */
+
+// ── Adaptateur IndexedDB ──────────────────────────────────
+const createIdbAdapter = () => {
+  const DB_NAME = 'agenda_v1';
+  const DB_VER = 1;
+  const STORE = 'appointments';
+
+  const openDb = () => new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE))
+        db.createObjectStore(STORE, { keyPath: 'id' });
+    };
+    req.onsuccess = e => res(e.target.result);
+    req.onerror = e => rej(e.target.error);
+  });
+
+  const getAll = async () => {
+    const db = await openDb();
+    return new Promise((res, rej) => {
+      const req = db.transaction(STORE, 'readonly').objectStore(STORE).getAll();
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+  };
+
+  const save = async appt => {
+    const db = await openDb();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(appt);
+      tx.oncomplete = () => res(appt);
+      tx.onerror = () => rej(tx.error);
+    });
+  };
+
+  const remove = async id => {
+    const db = await openDb();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).delete(id);
+      tx.oncomplete = () => res(id);
+      tx.onerror = () => rej(tx.error);
+    });
+  };
+
+  const replaceAll = async appts => {
+    const db = await openDb();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const st = tx.objectStore(STORE);
+      st.clear();
+      appts.forEach(a => st.put(a));
+      tx.oncomplete = () => res(appts);
+      tx.onerror = () => rej(tx.error);
+    });
+  };
+
+  return { getAll, save, remove, replaceAll };
+};
+
+// ── Adaptateur Base64 ─────────────────────────────────────
+const createCodecAdapter = () => {
+  const encode = appts => {
+    try {
+      return btoa(unescape(encodeURIComponent(JSON.stringify(appts))));
+    } catch {
+      throw new Error('Erreur lors de l\'encodage');
+    }
+  };
+
+  const decode = str => {
+    try {
+      const data = JSON.parse(decodeURIComponent(escape(atob(str.trim()))));
+      if (!Array.isArray(data)) throw new Error();
+      return data;
+    } catch {
+      throw new Error('Code base64 invalide ou corrompu');
+    }
+  };
+
+  return { encode, decode };
+};
+
+
+/* ═══════════════════════════════════════════════════════════
+   APPLICATION — Cas d'usage (orchestration)
+   ═══════════════════════════════════════════════════════════ */
+const createUseCases = (repo, codec) => {
+
+  const list = () => repo.getAll();
+
+  const add = async data => {
+    const errs = domain.validate(data);
+    if (errs.length) throw new Error(errs.join(', '));
+    const appt = domain.makeAppointment(data);
+    await repo.save(appt);
+    return appt;
+  };
+
+  const edit = async (id, patch, appts) => {
+    const original = appts.find(a => a.id === id);
+    if (!original) throw new Error('Rendez-vous introuvable');
+    const errs = domain.validate({ ...original, ...patch });
+    if (errs.length) throw new Error(errs.join(', '));
+    const updated = domain.patchAppointment(original, patch);
+    await repo.save(updated);
+    return updated;
+  };
+
+  const del = id => repo.remove(id);
+
+  const exportB64 = async () => codec.encode(await repo.getAll());
+
+  const importB64 = async str => {
+    const appts = codec.decode(str);
+    return repo.replaceAll(appts);
+  };
+
+  return { list, add, edit, del, exportB64, importB64 };
+};
+
+
+/* ═══════════════════════════════════════════════════════════
+   UI — Utilitaires
+   ═══════════════════════════════════════════════════════════ */
+const ui = (() => {
+  const $ = s => document.querySelector(s);
+  const $$ = s => document.querySelectorAll(s);
+
+  const openModal = id => $(`#${id}`).classList.add('open');
+  const closeModal = id => $(`#${id}`).classList.remove('open');
+
+  const toast = (msg, type = 'success') => {
+    const ico = { success: '✓', error: '✗', info: 'ℹ' };
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.innerHTML = `<span>${ico[type] ?? '•'}</span><span>${msg}</span>`;
+    $('#toasts').appendChild(el);
+    setTimeout(() => el.remove(), 3100);
+  };
+
+  const esc = s => !s ? '' : String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  return { $, $$, openModal, closeModal, toast, esc };
+})();
+
+
+/* ═══════════════════════════════════════════════════════════
+   UI — Rendu (couche présentation, sans logique métier)
+   ═══════════════════════════════════════════════════════════ */
+const views = (() => {
+
+  // ── Color picker ───────────────────────────────────────
+  const colorPicker = (selected, onPick) => {
+    const cp = ui.$('#cp');
+    cp.innerHTML = domain.COLORS.map(c => `
+      <div class="cp-sw${c === selected ? ' sel' : ''}"
+           style="background:${c}" data-color="${c}"></div>
+    `).join('');
+    cp.querySelectorAll('.cp-sw').forEach(sw =>
+      sw.addEventListener('click', () => {
+        cp.querySelectorAll('.cp-sw').forEach(s => s.classList.remove('sel'));
+        sw.classList.add('sel');
+        onPick(sw.dataset.color);
+      })
+    );
+  };
+
+  // ── Mini calendrier ────────────────────────────────────
+  const miniCal = (year, month, appts, sel) => {
+    const today = domain.todayStr();
+    const days = domain.buildMonthGrid(year, month, 0);
+    const hasDates = new Set(appts.map(a => a.date));
+
+    ui.$('#mini-cal').innerHTML = `
+      <div class="mc-nav">
+        <span class="mc-title">${domain.MONTHS[month].slice(0,4)} ${year}</span>
+        <div class="mc-btns">
+          <button class="mc-btn" id="mc-prev">‹</button>
+          <button class="mc-btn" id="mc-next">›</button>
+        </div>
+      </div>
+      <div class="mc-grid">
+        ${domain.DAYS.map(d => `<div class="mc-dn">${d[0]}</div>`).join('')}
+        ${days.map(d => `
+          <div class="mc-d${!d.cur ? ' out' : ''}${d.str === today ? ' today' : ''}${d.str === sel ? ' sel' : ''}${hasDates.has(d.str) ? ' has' : ''}"
+               data-date="${d.str}">${d.n}</div>
+        `).join('')}
+      </div>`;
+  };
+
+  // ── Prochains événements ───────────────────────────────
+  const upcoming = appts => {
+    const list = domain.upcoming(appts);
+    const el = ui.$('#upcoming');
+    if (!list.length) {
+      el.innerHTML = `<p style="font-size:12px;color:var(--text-3);text-align:center;padding:10px 0">Aucun rendez-vous à venir</p>`;
+      return;
+    }
+    el.innerHTML = list.map(a => `
+      <div class="upc" data-date="${a.date}">
+        <div class="upc-dot" style="background:${a.color}"></div>
+        <div class="upc-body">
+          <div class="upc-title">${ui.esc(a.title)}</div>
+          <div class="upc-time">${domain.fmtShort(a.date)}${a.startTime ? ' · ' + a.startTime : ''}</div>
+        </div>
+      </div>`).join('');
+  };
+
+  // ── Vue mensuelle ──────────────────────────────────────
+  const monthView = (year, month, appts, sel) => {
+    const today = domain.todayStr();
+    const days = domain.buildMonthGrid(year, month, 42);
+    const byDate = appts.reduce((acc, a) => ((acc[a.date] ??= []).push(a), acc), {});
+    const cc = ui.$('#cal-content');
+    cc.dataset.view = 'month';
+
+    cc.innerHTML = `
+      <div class="month-grid">
+        <div class="month-dn-row">
+          ${domain.DAYS.map(d => `<div class="month-dn">${d}</div>`).join('')}
+        </div>
+        <div class="month-days">
+          ${days.map(day => {
+            const da = (byDate[day.str] ?? []).sort((a,b) => (a.startTime||'').localeCompare(b.startTime||''));
+            const vis = da.slice(0, 3);
+            const more = da.length - 3;
+            return `
+              <div class="mday${!day.cur?' out':''}${day.str===today?' today':''}${day.str===sel?' sel':''}"
+                   data-date="${day.str}">
+                <div class="day-n">${day.n}</div>
+                <div class="day-chips">
+                  ${vis.map(a => `
+                    <div class="ev-chip" style="background:${a.color}" data-id="${a.id}" data-date="${a.date}">
+                      ${a.startTime ? `<span style="opacity:.7;font-size:9px">${a.startTime} </span>` : ''}${ui.esc(a.title)}
+                    </div>`).join('')}
+                  ${more > 0 ? `<div class="more-chip" data-date="${day.str}">+${more} autre${more>1?'s':''}</div>` : ''}
+                </div>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  };
+
+  // ── Vue hebdomadaire ───────────────────────────────────
+  const weekView = (year, month, day, appts) => {
+    const today = domain.todayStr();
+    const H = 54; // px / heure
+    const center = new Date(year, month, day);
+    const dow = center.getDay() === 0 ? 6 : center.getDay() - 1;
+    const monday = new Date(center);
+    monday.setDate(center.getDate() - dow);
+
+    const weekDays = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return { str: domain.toDateStr(d), n: d.getDate(), name: domain.DAYS[i] };
+    });
+
+    const HOURS = Array.from({ length: 24 }, (_, i) => i);
+    const byDate = appts.reduce((acc, a) => ((acc[a.date] ??= []).push(a), acc), {});
+
+    const t2px = t => {
+      if (!t) return 0;
+      const [h, m] = t.split(':').map(Number);
+      return (h * 60 + m) / 60 * H;
+    };
+
+    const evStyle = a => {
+      const top = t2px(a.startTime || '00:00');
+      const bottom = a.endTime ? t2px(a.endTime) : top + H;
+      return `top:${top}px;height:${Math.max(bottom - top, 22)}px;`;
+    };
+
+    const cc = ui.$('#cal-content');
+    cc.dataset.view = 'week';
+
+    cc.innerHTML = `
+      <div class="week-wrap">
+        <div class="week-hdr">
+          <div class="wh-time"></div>
+          ${weekDays.map(d => `
+            <div class="wh-day" style="${d.str===today?'background:var(--primary-light)':''}">
+              <div class="wh-name" style="${d.str===today?'color:var(--primary)':''}">${d.name}</div>
+              <div class="wh-num${d.str===today?' today-n':''}" data-date="${d.str}">${d.n}</div>
+            </div>`).join('')}
+        </div>
+        <div class="week-body" id="week-body">
+          <div class="w-time-col">
+            ${HOURS.map(h => `<div class="w-hour-lbl">${String(h).padStart(2,'0')}:00</div>`).join('')}
+          </div>
+          ${weekDays.map(d => `
+            <div class="w-day-col" data-date="${d.str}" style="${d.str===today?'background:#faf9ff':''}">
+              ${HOURS.map(() => `<div class="w-hour-cell"></div>`).join('')}
+              ${HOURS.map(h => `<div class="w-half" style="top:${h*H+H/2}px"></div>`).join('')}
+              ${(byDate[d.str] ?? []).map(a => `
+                <div class="w-ev" style="background:${a.color};${evStyle(a)}" data-id="${a.id}">
+                  <div class="w-ev-t">${ui.esc(a.title)}</div>
+                  ${a.startTime ? `<div class="w-ev-s">${a.startTime}${a.endTime?'–'+a.endTime:''}</div>` : ''}
+                </div>`).join('')}
+            </div>`).join('')}
+        </div>
+      </div>`;
+
+    // Ligne "heure courante"
+    const wb = ui.$('#week-body');
+    const todayCol = wb?.querySelector(`.w-day-col[data-date="${today}"]`);
+    if (todayCol) {
+      const now = new Date();
+      const px = t2px(`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`);
+      const line = document.createElement('div');
+      line.className = 'now-line';
+      line.style.top = `${px}px`;
+      line.innerHTML = '<div class="now-dot"></div>';
+      todayCol.appendChild(line);
+    }
+    // Scroll vers l'heure courante
+    if (wb) wb.scrollTop = Math.max(0, (new Date().getHours() - 1) * H);
+  };
+
+  // ── Panneau du jour ────────────────────────────────────
+
+  // ── Panneau du jour ────────────────────────────────────
+  const dayPanel = (dateStr, appts) => {
+    const da = domain.forDate(appts, dateStr);
+    ui.$('#dp-date').textContent  = domain.fmtFull(dateStr);
+    ui.$('#dp-count').textContent = `${da.length} rendez-vous`;
+
+    const el = ui.$('#dp-list');
+    if (!da.length) {
+      el.innerHTML = `
+        <div class="empty">
+          <div class="empty-ico">📆</div>
+          <div class="empty-txt">Aucun rendez-vous</div>
+          <div class="empty-sub">Cliquez sur + pour en ajouter</div>
+        </div>`;
+      return;
+    }
+    el.innerHTML = da.map(a => `
+      <div class="dp-card" style="border-left-color:${a.color}" data-id="${a.id}">
+        <div class="dp-card-title">${ui.esc(a.title)}</div>
+        <div class="dp-card-time">🕐 ${domain.fmtTime(a.startTime, a.endTime)}</div>
+        ${a.description ? `<div class="dp-card-desc">${ui.esc(a.description)}</div>` : ''}
+        <div class="dp-card-acts">
+          <button class="btn btn-secondary" style="font-size:11px;padding:4px 9px" data-edit="${a.id}">✏ Modifier</button>
+          <button class="btn btn-danger"    style="font-size:11px;padding:4px 9px" data-delete="${a.id}">🗑</button>
+        </div>
+      </div>`).join('');
+  };
+
+  return { colorPicker, miniCal, upcoming, monthView, weekView, dayPanel };
+})();
+
+
+/* ═══════════════════════════════════════════════════════════
+   CONTRÔLEUR — État et orchestration
+   ═══════════════════════════════════════════════════════════ */
+const app = (() => {
+  // ── Dépendances (injection) ───────────────────────────
+  const repo  = createIdbAdapter();
+  const codec = createCodecAdapter();
+  const uc    = createUseCases(repo, codec);
+
+  // ── État applicatif ───────────────────────────────────
+  const now = new Date();
+  let state = {
+    appts:  [],
+    year:   now.getFullYear(),
+    month:  now.getMonth(),
+    day:    now.getDate(),
+    sel:    domain.todayStr(),
+    view:   'month',
+    editId: null,
+    color:  domain.COLORS[0]
+  };
+
+  const set = patch => { state = { ...state, ...patch }; };
+
+  // ── Rendu global ──────────────────────────────────────
+  const draw = () => {
+    const { year: y, month: m, day: d, sel, view, appts } = state;
+
+    // Titre de la toolbar
+    if (view === 'month') {
+      ui.$('#cal-title').textContent = `${domain.MONTHS[m]} ${y}`;
+    } else {
+      const center = new Date(y, m, d);
+      const dow    = center.getDay() === 0 ? 6 : center.getDay() - 1;
+      const mon    = new Date(center); mon.setDate(center.getDate() - dow);
+      const sun    = new Date(mon);    sun.setDate(mon.getDate() + 6);
+      const label  = mon.getMonth() === sun.getMonth()
+        ? `${mon.getDate()} – ${sun.getDate()} ${domain.MONTHS[mon.getMonth()]} ${y}`
+        : `${mon.getDate()} ${domain.MONTHS[mon.getMonth()].slice(0,3)} – ${sun.getDate()} ${domain.MONTHS[sun.getMonth()].slice(0,3)} ${sun.getFullYear()}`;
+      ui.$('#cal-title').textContent = label;
+    }
+
+    views.miniCal(y, m, appts, sel);
+    views.upcoming(appts);
+    view === 'month'
+      ? views.monthView(y, m, appts, sel)
+      : views.weekView(y, m, d, appts);
+    views.dayPanel(sel, appts);
+
+    bindDynamic();
+  };
+
+  // ── Liaisons dynamiques (après chaque rendu) ──────────
+  const bindDynamic = () => {
+    // Mini-cal navigation
+    const mp = ui.$('#mc-prev'), mn = ui.$('#mc-next');
+    if (mp) mp.addEventListener('click', e => { e.stopPropagation(); navMonth(-1); });
+    if (mn) mn.addEventListener('click', e => { e.stopPropagation(); navMonth(+1); });
+
+    // Mini-cal jours
+    ui.$$('.mc-d').forEach(el =>
+      el.addEventListener('click', () => el.dataset.date && selectDate(el.dataset.date)));
+
+    // Prochains RDV
+    ui.$$('.upc').forEach(el =>
+      el.addEventListener('click', () => el.dataset.date && selectDate(el.dataset.date)));
+
+    // Cellules mois
+    ui.$$('.mday').forEach(el =>
+      el.addEventListener('click', e => {
+        const t = e.target;
+        if (t.classList.contains('ev-chip') || t.classList.contains('more-chip')) return;
+        el.dataset.date && selectDate(el.dataset.date);
+      })
+    );
+
+    // Chips événements (mois)
+    ui.$$('.ev-chip').forEach(el =>
+      el.addEventListener('click', e => {
+        e.stopPropagation();
+        if (el.dataset.date) selectDate(el.dataset.date);
+        if (el.dataset.id)   openEdit(el.dataset.id);
+      })
+    );
+
+    // "+N autres"
+    ui.$$('.more-chip').forEach(el =>
+      el.addEventListener('click', e => {
+        e.stopPropagation();
+        el.dataset.date && selectDate(el.dataset.date);
+      })
+    );
+
+    // Numéros de jours (semaine)
+    ui.$$('.wh-num[data-date]').forEach(el =>
+      el.addEventListener('click', e => {
+        e.stopPropagation();
+        el.dataset.date && selectDate(el.dataset.date);
+      })
+    );
+
+    // Colonnes de jours (semaine) → clic = nouveau RDV à l'heure cliquée
+    ui.$$('.w-day-col[data-date]').forEach(el =>
+      el.addEventListener('click', e => {
+        if (e.target.closest('.w-ev')) return;
+        const date = el.dataset.date;
+        if (!date) return;
+        const rect = el.getBoundingClientRect();
+        const relY = e.clientY - rect.top;
+        const h    = Math.min(23, Math.floor(relY / 54));
+        selectDate(date);
+        openAdd(date, `${String(h).padStart(2,'0')}:00`);
+      })
+    );
+
+    // Événements semaine
+    ui.$$('.w-ev').forEach(el =>
+      el.addEventListener('click', e => {
+        e.stopPropagation();
+        el.dataset.id && openEdit(el.dataset.id);
+      })
+    );
+
+    // Panneau du jour
+    ui.$$('[data-edit]').forEach(el =>
+      el.addEventListener('click', e => { e.stopPropagation(); openEdit(el.dataset.edit); }));
+
+    ui.$$('[data-delete]').forEach(el =>
+      el.addEventListener('click', e => { e.stopPropagation(); deleteAppt(el.dataset.delete); }));
+
+    ui.$$('.dp-card[data-id]').forEach(el =>
+      el.addEventListener('click', e => {
+        if (e.target.closest('[data-edit]') || e.target.closest('[data-delete]')) return;
+        openEdit(el.dataset.id);
+      })
+    );
+  };
+
+  // ── Navigation ────────────────────────────────────────
+  const navMonth = delta => {
+    let { year: y, month: m } = state;
+    m += delta;
+    if (m < 0)  { m = 11; y--; }
+    if (m > 11) { m = 0;  y++; }
+    set({ year: y, month: m });
+    draw();
+  };
+
+  const navWeek = delta => {
+    const d = new Date(state.year, state.month, state.day);
+    d.setDate(d.getDate() + delta * 7);
+    set({ year: d.getFullYear(), month: d.getMonth(), day: d.getDate() });
+    draw();
+  };
+
+  const goToday = () => {
+    const n = new Date();
+    set({ year: n.getFullYear(), month: n.getMonth(), day: n.getDate(), sel: domain.todayStr() });
+    draw();
+  };
+
+  const selectDate = dateStr => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    set({ sel: dateStr, year: y, month: m - 1, day: d });
+    draw();
+  };
+
+  // ── Modals ────────────────────────────────────────────
+  const openAdd = (date = state.sel, startTime = '') => {
+    set({ editId: null, color: domain.COLORS[0] });
+    ui.$('#modal-appt-title').textContent = 'Nouveau rendez-vous';
+    ui.$('#f-title').value   = '';
+    ui.$('#f-date').value    = date;
+    ui.$('#f-start').value   = startTime;
+    ui.$('#f-end').value     = '';
+    ui.$('#f-desc').value    = '';
+    ui.$('#btn-del').style.display = 'none';
+    views.colorPicker(state.color, c => set({ color: c }));
+    ui.openModal('modal-appt');
+    setTimeout(() => ui.$('#f-title').focus(), 220);
+  };
+
+  const openEdit = id => {
+    const a = state.appts.find(x => x.id === id);
+    if (!a) return;
+    set({ editId: id, color: a.color });
+    ui.$('#modal-appt-title').textContent = 'Modifier le rendez-vous';
+    ui.$('#f-title').value   = a.title;
+    ui.$('#f-date').value    = a.date;
+    ui.$('#f-start').value   = a.startTime  || '';
+    ui.$('#f-end').value     = a.endTime    || '';
+    ui.$('#f-desc').value    = a.description || '';
+    ui.$('#btn-del').style.display = '';
+    views.colorPicker(state.color, c => set({ color: c }));
+    ui.openModal('modal-appt');
+  };
+
+  // ── CRUD ──────────────────────────────────────────────
+  const saveAppt = async () => {
+    const data = {
+      title:       ui.$('#f-title').value,
+      date:        ui.$('#f-date').value,
+      startTime:   ui.$('#f-start').value,
+      endTime:     ui.$('#f-end').value,
+      description: ui.$('#f-desc').value,
+      color:       state.color
+    };
+    try {
+      if (state.editId) {
+        const updated = await uc.edit(state.editId, data, state.appts);
+        set({ appts: state.appts.map(a => a.id === state.editId ? updated : a) });
+        ui.toast('Rendez-vous modifié ✓');
+      } else {
+        const created = await uc.add(data);
+        const [y, m, d] = data.date.split('-').map(Number);
+        set({ appts: [...state.appts, created], sel: data.date, year: y, month: m - 1, day: d });
+        ui.toast('Rendez-vous ajouté ✓');
+      }
+      ui.closeModal('modal-appt');
+      draw();
+    } catch (err) {
+      ui.toast(err.message, 'error');
+    }
+  };
+
+  const deleteAppt = async id => {
+    try {
+      await uc.del(id);
+      set({ appts: state.appts.filter(a => a.id !== id) });
+      ui.closeModal('modal-appt');
+      ui.toast('Rendez-vous supprimé', 'info');
+      draw();
+    } catch (err) {
+      ui.toast(err.message, 'error');
+    }
+  };
+
+  // ── Import / Export ───────────────────────────────────
+  const doExport = async () => {
+    try {
+      ui.$('#exp-val').value = await uc.exportB64();
+      ui.openModal('modal-export');
+    } catch (err) { ui.toast(err.message, 'error'); }
+  };
+
+  const doImport = async () => {
+    const str = ui.$('#imp-val').value.trim();
+    if (!str) { ui.toast('Collez un code base64 valide', 'error'); return; }
+    try {
+      const imported = await uc.importB64(str);
+      set({ appts: imported });
+      ui.closeModal('modal-import');
+      ui.$('#imp-val').value = '';
+      ui.toast(`${imported.length} rendez-vous importés`);
+      draw();
+    } catch (err) { ui.toast(err.message, 'error'); }
+  };
+
+  // ── Liaisons statiques (une seule fois) ───────────────
+  const bindStatic = () => {
+    ui.$('#btn-add').addEventListener('click',    () => openAdd());
+    ui.$('#btn-add-dp').addEventListener('click', () => openAdd(state.sel));
+
+    ui.$('#btn-prev').addEventListener('click',
+      () => state.view === 'month' ? navMonth(-1) : navWeek(-1));
+    ui.$('#btn-next').addEventListener('click',
+      () => state.view === 'month' ? navMonth(+1) : navWeek(+1));
+    ui.$('#btn-today').addEventListener('click', goToday);
+
+    ui.$$('.view-sw-btn').forEach(btn =>
+      btn.addEventListener('click', () => {
+        ui.$$('.view-sw-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        set({ view: btn.dataset.view });
+        draw();
+      })
+    );
+
+    // Fermeture des modals
+    ui.$$('[data-close]').forEach(btn =>
+      btn.addEventListener('click', () => ui.closeModal(btn.dataset.close)));
+
+    ui.$$('.overlay').forEach(ov =>
+      ov.addEventListener('click', e => e.target === ov && ui.closeModal(ov.id)));
+
+    // Modal RDV
+    ui.$('#btn-save').addEventListener('click', saveAppt);
+    ui.$('#f-title').addEventListener('keydown', e => e.key === 'Enter' && saveAppt());
+    ui.$('#btn-del').addEventListener('click', () => state.editId && deleteAppt(state.editId));
+
+    // Export
+    ui.$('#btn-export').addEventListener('click', doExport);
+    ui.$('#btn-copy').addEventListener('click', () => {
+      const val = ui.$('#exp-val').value;
+      (navigator.clipboard?.writeText(val) ?? Promise.reject())
+        .then(() => ui.toast('Copié dans le presse-papier'))
+        .catch(() => {
+          ui.$('#exp-val').select();
+          document.execCommand('copy');
+          ui.toast('Copié');
+        });
+    });
+
+    // Import
+    ui.$('#btn-import').addEventListener('click', () => ui.openModal('modal-import'));
+    ui.$('#btn-imp-ok').addEventListener('click', doImport);
+
+    // Raccourcis clavier
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape')
+        ui.$$('.overlay.open').forEach(o => o.classList.remove('open'));
+      if (e.key === 'n' && !e.target.matches('input,textarea,select'))
+        openAdd();
+    });
+  };
+
+  // ── Initialisation ────────────────────────────────────
+  const init = async () => {
+    try {
+      set({ appts: await uc.list() });
+    } catch (e) {
+      console.error('IndexedDB :', e);
+      ui.toast('IndexedDB indisponible — données non persistées', 'error');
+    }
+    draw();
+    bindStatic();
+  };
+
+  return { init };
+})();
+
+document.addEventListener('DOMContentLoaded', () => app.init());
+</script>
+</body>
+</html>
