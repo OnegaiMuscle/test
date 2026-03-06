@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculatrice</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --clr-bg:       #0b0b18;
+      --clr-surface:  rgba(255,255,255,0.05);
+      --clr-border:   rgba(255,255,255,0.08);
+      --clr-op:       #f97316;
+      --clr-eq:       #6366f1;
+      --clr-clr:      #ef4444;
+      --clr-sci:      #a78bfa;
+      --clr-text:     #f1f5f9;
+      --clr-muted:    #64748b;
+      --r-card:       26px;
+      --r-btn:        14px;
+      --gap:          9px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: linear-gradient(155deg, #0b0b18 0%, #15072e 55%, #071528 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    /* ── Wrapper ── */
+    .wrapper {
+      width: 100%;
+      max-width: 390px;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: rgba(255,255,255,0.04);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--r-card);
+      padding: 20px;
+      box-shadow:
+        0 40px 90px rgba(0,0,0,0.65),
+        0 0 0 1px rgba(255,255,255,0.03);
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .mode-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--clr-muted);
+    }
+
+    /* ── Toggle ── */
+    .toggle { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+    .toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+
+    .toggle-track {
+      width: 42px; height: 22px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 11px;
+      position: relative;
+      transition: background 0.25s;
+    }
+    .toggle input:checked ~ .toggle-track { background: var(--clr-eq); border-color: var(--clr-eq); }
+
+    .toggle-thumb {
+      position: absolute; top: 2px; left: 2px;
+      width: 16px; height: 16px;
+      background: #fff; border-radius: 50%;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+      transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+    }
+    .toggle input:checked ~ .toggle-track .toggle-thumb { transform: translateX(20px); }
+    .toggle-txt { font-size: 0.72rem; font-weight: 600; color: var(--clr-muted); }
+
+    /* ── Display ── */
+    .display {
+      background: rgba(0,0,0,0.28);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 16px;
+      padding: 14px 18px;
+      margin-bottom: 14px;
+      text-align: right;
+      min-height: 86px;
+      display: flex; flex-direction: column; justify-content: flex-end; gap: 5px;
+      overflow: hidden;
+    }
+
+    .disp-expr {
+      font-size: 0.82rem;
+      color: var(--clr-muted);
+      min-height: 18px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .disp-val {
+      font-size: 2.6rem;
+      font-weight: 200;
+      color: var(--clr-text);
+      line-height: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: font-size 0.12s ease;
+    }
+    .disp-val.sz-md { font-size: 2rem;   }
+    .disp-val.sz-sm { font-size: 1.5rem; }
+    .disp-val.sz-xs { font-size: 1.15rem;}
+
+    /* ── Scientific Panel ── */
+    .sci-panel {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 7px;
+      max-height: 0;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+      transition:
+        max-height 0.38s cubic-bezier(0.4,0,0.2,1),
+        opacity    0.28s ease,
+        margin-bottom 0.32s ease;
+      margin-bottom: 0;
+    }
+    .sci-panel.open {
+      max-height: 180px;
+      opacity: 1;
+      pointer-events: auto;
+      margin-bottom: 10px;
+    }
+
+    /* ── Standard Grid ── */
+    .std-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--gap);
+    }
+
+    /* ── Base Button ── */
+    .btn {
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: var(--r-btn);
+      font-family: inherit;
+      font-size: 1.1rem;
+      font-weight: 500;
+      color: var(--clr-text);
+      background: rgba(255,255,255,0.07);
+      height: 62px;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition:
+        background  0.15s ease,
+        transform   0.12s ease,
+        box-shadow  0.15s ease;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    /* Ripple overlay */
+    .btn::after {
+      content: '';
+      position: absolute; inset: 0;
+      border-radius: inherit;
+      background: radial-gradient(circle at center, rgba(255,255,255,0.22) 0%, transparent 65%);
+      opacity: 0;
+      transition: opacity 0.12s;
+    }
+    .btn:hover               { background: rgba(255,255,255,0.12); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.3); }
+    .btn:active, .btn.flash  { transform: scale(0.93); box-shadow: none; }
+    .btn:active::after,
+    .btn.flash::after        { opacity: 1; }
+
+    /* Variants */
+    .btn-op  { color: var(--clr-op); background: rgba(249,115,22,0.1); border-color: rgba(249,115,22,0.18); }
+    .btn-op:hover  { background: rgba(249,115,22,0.22); }
+
+    .btn-clr { color: var(--clr-clr); background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.15); font-size: 0.95rem; }
+    .btn-clr:hover { background: rgba(239,68,68,0.2); }
+
+    .btn-eq {
+      background: linear-gradient(145deg, #6366f1 0%, #8b5cf6 100%);
+      border-color: transparent;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #fff;
+    }
+    .btn-eq:hover { background: linear-gradient(145deg, #7577f3 0%, #9d6cf8 100%); box-shadow: 0 6px 20px rgba(99,102,241,0.45); }
+
+    .btn-sci {
+      height: 44px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--clr-sci);
+      background: rgba(139,92,246,0.1);
+      border-color: rgba(139,92,246,0.2);
+      border-radius: 10px;
+    }
+    .btn-sci:hover { background: rgba(139,92,246,0.24); }
+
+    .btn-zero { grid-column: span 2; }
+
+    /* ── Responsive ── */
+    @media (max-width: 360px) {
+      .card    { padding: 14px; }
+      .btn     { height: 54px; font-size: 1rem; border-radius: 11px; }
+      .btn-sci { height: 40px; font-size: 0.7rem; }
+      .std-grid, .sci-panel { gap: 6px; }
+      :root    { --gap: 6px; }
+      .disp-val { font-size: 2.1rem; }
+    }
+
+    @media (min-width: 480px) {
+      .wrapper { max-width: 420px; }
+      .btn     { height: 68px; }
+      .btn-sci { height: 50px; font-size: 0.82rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="card" id="js-card">
+
+    <!-- Header -->
+    <div class="header">
+      <span class="mode-label" id="js-mode">Standard</span>
+      <label class="toggle">
+        <input type="checkbox" id="js-toggle">
+        <div class="toggle-track"><div class="toggle-thumb"></div></div>
+        <span class="toggle-txt">Scientifique</span>
+      </label>
+    </div>
+
+    <!-- Display -->
+    <div class="display">
+      <div class="disp-expr" id="js-expr"></div>
+      <div class="disp-val"  id="js-val">0</div>
+    </div>
+
+    <!-- Scientific Panel (3 rows × 5) -->
+    <div class="sci-panel" id="js-sci">
+      <button class="btn btn-sci" data-a="sci" data-fn="sin">sin</button>
+      <button class="btn btn-sci" data-a="sci" data-fn="cos">cos</button>
+      <button class="btn btn-sci" data-a="sci" data-fn="tan">tan</button>
+      <button class="btn btn-sci" data-a="sci" data-fn="log">log</button>
+      <button class="btn btn-sci" data-a="sci" data-fn="ln">ln</button>
+
+      <button class="btn btn-sci" data-a="sci" data-fn="sqrt">√x</button>
+      <button class="btn btn-sci" data-a="sci" data-fn="sq">x²</button>
+      <button class="btn btn-sci" data-a="sci" data-fn="cb">x³</button>
+      <button class="btn btn-sci" data-a="op"  data-op="^">xⁿ</button>
+      <button class="btn btn-sci" data-a="sci" data-fn="inv">1/x</button>
+
+      <button class="btn btn-sci" data-a="cst" data-v="3.141592653589793">π</button>
+      <button class="btn btn-sci" data-a="cst" data-v="2.718281828459045">e</button>
+      <button class="btn btn-sci" data-a="sci" data-fn="abs">|x|</button>
+      <button class="btn btn-sci" data-a="sci" data-fn="fct">n!</button>
+      <button class="btn btn-sci" data-a="sci" data-fn="neg">±</button>
+    </div>
+
+    <!-- Standard Grid -->
+    <div class="std-grid">
+      <button class="btn btn-clr" data-a="clear">C</button>
+      <button class="btn btn-clr" data-a="ce">CE</button>
+      <button class="btn btn-clr" data-a="back" style="font-size:1.25rem">⌫</button>
+      <button class="btn btn-op"  data-a="op" data-op="÷">÷</button>
+
+      <button class="btn" data-a="d" data-d="7">7</button>
+      <button class="btn" data-a="d" data-d="8">8</button>
+      <button class="btn" data-a="d" data-d="9">9</button>
+      <button class="btn btn-op" data-a="op" data-op="×">×</button>
+
+      <button class="btn" data-a="d" data-d="4">4</button>
+      <button class="btn" data-a="d" data-d="5">5</button>
+      <button class="btn" data-a="d" data-d="6">6</button>
+      <button class="btn btn-op" data-a="op" data-op="−">−</button>
+
+      <button class="btn" data-a="d" data-d="1">1</button>
+      <button class="btn" data-a="d" data-d="2">2</button>
+      <button class="btn" data-a="d" data-d="3">3</button>
+      <button class="btn btn-op" data-a="op" data-op="+">+</button>
+
+      <button class="btn btn-zero" data-a="d" data-d="0">0</button>
+      <button class="btn" data-a="dot">.</button>
+      <button class="btn btn-eq"  data-a="eq">=</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ================================================================
+   HEXAGONAL ARCHITECTURE — Functional, No Classes
+   ================================================================
+   [ DOMAIN ]   Pure business logic, zero side-effects
+   [ PORTS ]    Contracts (input / output)
+   [ ADAPTERS ] Connect domain ↔ DOM
+   [ BOOT ]     Composition root — wire everything
+   ================================================================ */
+
+
+/* ================================================================
+   DOMAIN
+   ================================================================ */
+
+/**
+ * Eliminate floating-point noise (e.g. 0.1 + 0.2 → 0.3).
+ * toPrecision(12) rounds away sub-epsilon garbage while keeping
+ * 12 significant digits — sufficient for a pocket calculator.
+ */
+const fixFloat = (n) => {
+  if (!isFinite(n)) return n;
+  return parseFloat(n.toPrecision(12));
+};
+
+/** Binary arithmetic — returns a clean float. */
+const compute = (a, op, b) => {
+  const x = parseFloat(a);
+  const y = parseFloat(b);
+  const table = {
+    '+': () => x + y,
+    '−': () => x - y,
+    '×': () => x * y,
+    '÷': () => (y === 0 ? Infinity : x / y),
+    '^': () => Math.pow(x, y),
+  };
+  return table[op] ? fixFloat(table[op]()) : x;
+};
+
+/** Unary scientific functions (trig in degrees). */
+const applyUnary = (n, fn) => {
+  const deg2rad = (d) => d * Math.PI / 180;
+  const table = {
+    sin: (x) => fixFloat(Math.sin(deg2rad(x))),
+    cos: (x) => fixFloat(Math.cos(deg2rad(x))),
+    tan: (x) => fixFloat(Math.tan(deg2rad(x))),
+    log: (x) => (x <= 0 ? NaN : fixFloat(Math.log10(x))),
+    ln:  (x) => (x <= 0 ? NaN : fixFloat(Math.log(x))),
+    sqrt:(x) => (x < 0  ? NaN : fixFloat(Math.sqrt(x))),
+    sq:  (x) => fixFloat(x * x),
+    cb:  (x) => fixFloat(x * x * x),
+    inv: (x) => (x === 0 ? Infinity : fixFloat(1 / x)),
+    abs: (x) => fixFloat(Math.abs(x)),
+    neg: (x) => fixFloat(-x),
+    fct: (x) => {
+      if (!Number.isInteger(x) || x < 0 || x > 170) return NaN;
+      let r = 1;
+      for (let i = 2; i <= x; i++) r *= i;
+      return r;
+    },
+  };
+  return table[fn] ? table[fn](n) : n;
+};
+
+/** Format a number for the display string. */
+const fmt = (n) => {
+  if (!isFinite(n)) return n > 0 ? '∞' : '-∞';
+  if (isNaN(n)) return 'Erreur';
+  if (Math.abs(n) >= 1e12 || (n !== 0 && Math.abs(n) < 1e-9))
+    return n.toExponential(6);
+  return String(n);
+};
+
+/** Factory for a fresh, immutable state record. */
+const mkState = (patch = {}) => Object.freeze({
+  val:        '0',
+  expr:       '',
+  pendingOp:  null,
+  pendingVal: null,
+  awaitNext:  false,
+  hasDot:     false,
+  error:      false,
+  scientific: false,
+  ...patch,
+});
+
+/**
+ * Pure state reducer.
+ * (state, action) → new state  — never mutates.
+ */
+const reduce = (s, a) => {
+  // In error state only CLEAR / TOGGLE pass through
+  if (s.error && a.t !== 'CLEAR' && a.t !== 'TOGGLE') return s;
+
+  switch (a.t) {
+
+    case 'DIGIT': {
+      const digits = s.val.replace('-', '').replace('.', '').length;
+      if (digits >= 12 && !s.awaitNext) return s;
+      if (s.awaitNext)
+        return { ...s, val: a.d, awaitNext: false, hasDot: false };
+      if (s.val === '0' || (s.val === '-0'))
+        return { ...s, val: (s.val === '-0' ? '-' : '') + a.d };
+      return { ...s, val: s.val + a.d };
+    }
+
+    case 'DOT': {
+      if (s.awaitNext)
+        return { ...s, val: '0.', awaitNext: false, hasDot: true };
+      if (s.hasDot) return s;
+      return { ...s, val: s.val + '.', hasDot: true };
+    }
+
+    case 'OP': {
+      // Chain: if there's a pending op and a fresh operand, compute first
+      if (s.pendingOp && !s.awaitNext) {
+        const res = compute(s.pendingVal, s.pendingOp, s.val);
+        if (isNaN(res))
+          return mkState({ error: true, val: 'Erreur', scientific: s.scientific });
+        const d = fmt(res);
+        return { ...s, val: d, pendingVal: d, pendingOp: a.op,
+                 awaitNext: true, hasDot: false, expr: d + ' ' + a.op };
+      }
+      return { ...s, pendingOp: a.op, pendingVal: s.val,
+               awaitNext: true, hasDot: false, expr: s.val + ' ' + a.op };
+    }
+
+    case 'EQ': {
+      if (!s.pendingOp) return s;
+      const res = compute(s.pendingVal, s.pendingOp, s.val);
+      if (isNaN(res))
+        return mkState({ error: true, val: 'Erreur', scientific: s.scientific });
+      const d = fmt(res);
+      return mkState({
+        val: d,
+        expr: s.pendingVal + ' ' + s.pendingOp + ' ' + s.val + ' =',
+        scientific: s.scientific,
+      });
+    }
+
+    case 'CLEAR':
+      return mkState({ scientific: s.scientific });
+
+    case 'CE':
+      return { ...s, val: '0', hasDot: false };
+
+    case 'BACK': {
+      if (s.awaitNext || s.error) return s;
+      if (s.val.length <= 1 || (s.val.startsWith('-') && s.val.length === 2))
+        return { ...s, val: '0', hasDot: false };
+      const nv = s.val.slice(0, -1);
+      return { ...s, val: nv, hasDot: nv.includes('.') };
+    }
+
+    case 'SCI': {
+      const res = applyUnary(parseFloat(s.val), a.fn);
+      if (isNaN(res))
+        return mkState({ error: true, val: 'Erreur', scientific: s.scientific });
+      const d = fmt(res);
+      return { ...s, val: d, expr: a.fn + '(' + s.val + ') =',
+               awaitNext: false, hasDot: d.includes('.') };
+    }
+
+    case 'CST':
+      return { ...s, val: String(a.v), awaitNext: false, hasDot: true };
+
+    case 'TOGGLE':
+      return { ...s, scientific: !s.scientific };
+
+    default: return s;
+  }
+};
+
+
+/* ================================================================
+   PORTS
+   ================================================================ */
+
+/**
+ * Input port — the only interface through which UI may reach the domain.
+ * @param {(action: object) => void} dispatch
+ */
+const mkInputPort = (dispatch) => ({
+  digit:    (d)  => dispatch({ t: 'DIGIT', d }),
+  dot:      ()   => dispatch({ t: 'DOT' }),
+  op:       (op) => dispatch({ t: 'OP', op }),
+  eq:       ()   => dispatch({ t: 'EQ' }),
+  clear:    ()   => dispatch({ t: 'CLEAR' }),
+  ce:       ()   => dispatch({ t: 'CE' }),
+  back:     ()   => dispatch({ t: 'BACK' }),
+  sci:      (fn) => dispatch({ t: 'SCI', fn }),
+  constant: (v)  => dispatch({ t: 'CST', v }),
+  toggle:   ()   => dispatch({ t: 'TOGGLE' }),
+});
+
+/**
+ * Output port — the only interface through which domain may reach the UI.
+ * @param {(state: object) => void} render
+ */
+const mkOutputPort = (render) => ({
+  update: (state) => render(state),
+});
+
+
+/* ================================================================
+   ADAPTERS
+   ================================================================ */
+
+/**
+ * Display Adapter (Output)
+ * Translates domain state → DOM mutations.
+ */
+const mkDisplayAdapter = () => {
+  const $val   = document.getElementById('js-val');
+  const $expr  = document.getElementById('js-expr');
+  const $sci   = document.getElementById('js-sci');
+  const $mode  = document.getElementById('js-mode');
+  const $tog   = document.getElementById('js-toggle');
+
+  const sizeClass = (len) =>
+    len > 16 ? 'sz-xs' : len > 12 ? 'sz-sm' : len > 8 ? 'sz-md' : '';
+
+  return (state) => {
+    // Display value
+    $val.textContent = state.val;
+    $val.className = 'disp-val ' + sizeClass(state.val.length);
+
+    // Expression line
+    $expr.textContent = state.expr;
+
+    // Scientific mode toggle
+    if (state.scientific) {
+      $sci.classList.add('open');
+      $mode.textContent = 'Scientifique';
+      $tog.checked = true;
+    } else {
+      $sci.classList.remove('open');
+      $mode.textContent = 'Standard';
+      $tog.checked = false;
+    }
+  };
+};
+
+/**
+ * Button Adapter (Input)
+ * Maps DOM click events → input port calls.
+ */
+const mkButtonAdapter = (port) => {
+  const actionMap = {
+    d:     (el) => port.digit(el.dataset.d),
+    op:    (el) => port.op(el.dataset.op),
+    dot:   ()   => port.dot(),
+    eq:    ()   => port.eq(),
+    clear: ()   => port.clear(),
+    ce:    ()   => port.ce(),
+    back:  ()   => port.back(),
+    sci:   (el) => port.sci(el.dataset.fn),
+    cst:   (el) => port.constant(parseFloat(el.dataset.v)),
+  };
+
+  const onClick = (e) => {
+    const el = e.target.closest('[data-a]');
+    if (!el) return;
+    const handler = actionMap[el.dataset.a];
+    if (handler) handler(el);
+  };
+
+  return { onClick };
+};
+
+/**
+ * Keyboard Adapter (Input)
+ * Maps keyboard events → input port calls + button flash feedback.
+ */
+const mkKeyboardAdapter = (port) => {
+  const flash = (selector) => {
+    const btn = document.querySelector(selector);
+    if (!btn) return;
+    btn.classList.add('flash');
+    setTimeout(() => btn.classList.remove('flash'), 130);
+  };
+
+  const keyMap = {
+    '0': () => { port.digit('0'); flash('[data-a="d"][data-d="0"]'); },
+    '1': () => { port.digit('1'); flash('[data-a="d"][data-d="1"]'); },
+    '2': () => { port.digit('2'); flash('[data-a="d"][data-d="2"]'); },
+    '3': () => { port.digit('3'); flash('[data-a="d"][data-d="3"]'); },
+    '4': () => { port.digit('4'); flash('[data-a="d"][data-d="4"]'); },
+    '5': () => { port.digit('5'); flash('[data-a="d"][data-d="5"]'); },
+    '6': () => { port.digit('6'); flash('[data-a="d"][data-d="6"]'); },
+    '7': () => { port.digit('7'); flash('[data-a="d"][data-d="7"]'); },
+    '8': () => { port.digit('8'); flash('[data-a="d"][data-d="8"]'); },
+    '9': () => { port.digit('9'); flash('[data-a="d"][data-d="9"]'); },
+    '.': () => { port.dot();      flash('[data-a="dot"]');            },
+    ',': () => { port.dot();      flash('[data-a="dot"]');            },
+    '+': () => { port.op('+');    flash('[data-op="+"]');             },
+    '-': () => { port.op('−');    flash('[data-op="−"]');             },
+    '*': () => { port.op('×');    flash('[data-op="×"]');             },
+    '^': () => { port.op('^');    flash('[data-op="^"]');             },
+    'Enter':     () => { port.eq();    flash('[data-a="eq"]');    },
+    '=':         () => { port.eq();    flash('[data-a="eq"]');    },
+    'Escape':    () => { port.clear(); flash('[data-a="clear"]'); },
+    'Delete':    () => { port.ce();    flash('[data-a="ce"]');    },
+    'Backspace': () => { port.back();  flash('[data-a="back"]');  },
+  };
+
+  const onKey = (e) => {
+    // Prevent "/" from opening browser quick-find
+    if (e.key === '/') { e.preventDefault(); port.op('÷'); flash('[data-op="÷"]'); return; }
+    const handler = keyMap[e.key];
+    if (handler) handler();
+  };
+
+  return { onKey };
+};
+
+/**
+ * Toggle Adapter (Input)
+ * Maps toggle checkbox change → input port.
+ */
+const mkToggleAdapter = (port) => ({
+  onChange: () => port.toggle(),
+});
+
+
+/* ================================================================
+   BOOT — Composition Root
+   ================================================================ */
+
+const bootstrap = () => {
+  let state = mkState();
+
+  // Output side
+  const renderFn    = mkDisplayAdapter();
+  const outputPort  = mkOutputPort(renderFn);
+
+  // Dispatch: run through reducer, then render
+  const dispatch = (action) => {
+    state = reduce(state, action);
+    outputPort.update(state);
+  };
+
+  // Input side
+  const inputPort     = mkInputPort(dispatch);
+  const btnAdapter    = mkButtonAdapter(inputPort);
+  const kbAdapter     = mkKeyboardAdapter(inputPort);
+  const togAdapter    = mkToggleAdapter(inputPort);
+
+  // Wire adapters → DOM
+  document.getElementById('js-card')
+    .addEventListener('click', btnAdapter.onClick);
+  document.addEventListener('keydown', kbAdapter.onKey);
+  document.getElementById('js-toggle')
+    .addEventListener('change', togAdapter.onChange);
+
+  // First render
+  outputPort.update(state);
+};
+
+bootstrap();
+</script>
+</body>
+</html>
